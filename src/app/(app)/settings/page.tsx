@@ -18,7 +18,6 @@ import {
   ChevronRight,
   ShieldCheck,
   ExternalLink,
-  Loader2,
   LogIn,
 } from "lucide-react";
 import { Instagram } from "@/components/icons";
@@ -54,7 +53,7 @@ export default function SettingsPage() {
     setCompany({ closedDays: next });
   }
 
-  const igConnected = !!cred.igAppVerified || !!cred.igAccessToken;
+  const igConnected = company.connected.instagram || !!cred.igAccessToken;
   const gbpConnected = !!cred.gbpAccessToken;
 
   return (
@@ -77,7 +76,7 @@ export default function SettingsPage() {
                 grad="linear-gradient(135deg,#ff7a45,#ff2e74)"
                 icon={<Instagram size={18} />}
                 title="Instagram"
-                desc={igConnected ? "アプリ認証済み・アカウント連携へ" : "App ID/Secretで連携します"}
+                desc={igConnected ? "アカウント連携済み" : "Instagramログインで連携します"}
                 connected={igConnected}
                 onClick={() => setSheet("instagram")}
               />
@@ -441,148 +440,98 @@ function IntegrationCard({
 }
 
 function InstagramConnect() {
-  const { company, setCredentials, setCompany, showToast } = useApp();
-  const cred = company.credentials ?? {};
-  const [appId, setAppId] = useState(cred.igAppId ?? "");
-  const [appSecret, setAppSecret] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [oauth, setOauth] = useState<{ connected: boolean; account?: string | null; page?: string | null }>(
-    { connected: false }
-  );
+  const { company, setCompany, showToast } = useApp();
+  const [cfg, setCfg] = useState<{ configured: boolean; appIdTail: string | null } | null>(null);
+  const [oauth, setOauth] = useState<{ connected: boolean; account?: string | null }>({
+    connected: false,
+  });
+  const [callbackUrl, setCallbackUrl] = useState("");
 
-  // Reflect the result of a returning OAuth redirect + current cookie status.
   useEffect(() => {
+    setCallbackUrl(`${window.location.origin}/api/auth/instagram/callback`);
     const params = new URLSearchParams(window.location.search);
     if (params.get("ig") === "connected") {
       showToast("Instagramアカウントを連携しました🎉");
       setCompany({ connected: { ...company.connected, instagram: true } });
+      window.history.replaceState({}, "", "/settings");
     } else if (params.get("ig") === "error") {
       showToast("連携に失敗しました（" + (params.get("reason") ?? "") + "）");
+      window.history.replaceState({}, "", "/settings");
     }
+    fetch("/api/integrations/instagram/config")
+      .then((r) => r.json())
+      .then(setCfg)
+      .catch(() => {});
     fetch("/api/integrations/instagram/status")
       .then((r) => r.json())
-      .then((s) =>
-        setOauth({ connected: !!s.connected, account: s.account?.username, page: s.page })
-      )
+      .then((s) => setOauth({ connected: !!s.connected, account: s.account?.username }))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function verify() {
-    if (!appId.trim() || !appSecret.trim()) {
-      setResult({ ok: false, msg: "App ID と App Secret を入力してください。" });
-      return;
-    }
-    setBusy(true);
-    setResult(null);
-    try {
-      const res = await fetch("/api/integrations/instagram/verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ appId: appId.trim(), appSecret: appSecret.trim() }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        // Persist only the public App ID + a verified flag. Never the secret.
-        setCredentials({ igAppId: appId.trim(), igAppVerified: true });
-        setResult({ ok: true, msg: data.message });
-        showToast("アプリ認証に成功しました");
-        setAppSecret("");
-      } else {
-        setResult({ ok: false, msg: data.error ?? "認証に失敗しました。" });
-      }
-    } catch {
-      setResult({ ok: false, msg: "通信に失敗しました。" });
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3">
         <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--brand-2)]" />
         <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
-          Instagram API（Instagramログイン方式）の認証情報を入力します。App Secret は
-          サーバー側でのみ使用し、ブラウザには保存しません。
+          Instagram API（Instagramログイン方式）で連携します。App ID / Secret は
+          サーバーの暗号化環境変数で安全に保管され、ブラウザには出ません。
         </p>
       </div>
 
-      {/* Step 1: app credential verification */}
+      {/* Step 1: server credentials status */}
       <div>
-        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">
-          ステップ1: アプリ認証（キーの有効性を確認）
-        </p>
-        <div className="space-y-2.5">
-          <div className="glass px-4 py-3">
-            <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">App ID</p>
-            <input
-              value={appId}
-              onChange={(e) => setAppId(e.target.value)}
-              placeholder="例: 1317853280469762"
-              autoComplete="off"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
-            />
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">ステップ1: 認証情報</p>
+        {cfg?.configured ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
+            <Check size={16} />
+            <span>設定済み（App ID …{cfg.appIdTail}）</span>
           </div>
-          <div className="glass px-4 py-3">
-            <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">App Secret</p>
-            <input
-              type="password"
-              value={appSecret}
-              onChange={(e) => setAppSecret(e.target.value)}
-              placeholder="32桁のシークレット"
-              autoComplete="off"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
-            />
-          </div>
-        </div>
-
-        {result && (
-          <div
-            className={`mt-2.5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[12px] ${
-              result.ok
-                ? "border border-[var(--ok)]/30 bg-[var(--ok)]/10 text-[var(--ok)]"
-                : "border border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)]"
-            }`}
-          >
-            {result.ok ? <Check size={14} className="mt-0.5" /> : null}
-            <span>{result.msg}</span>
+        ) : (
+          <div className="rounded-2xl border border-[var(--warn)]/30 bg-[var(--warn)]/10 px-4 py-3 text-[12px] text-[var(--fg-dim)]">
+            サーバーに認証情報が未設定です。環境変数 META_APP_ID / META_APP_SECRET を設定してください。
           </div>
         )}
-
-        <Button onClick={verify} className="mt-3 w-full" disabled={busy}>
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-          {busy ? "認証中…" : "アプリを認証して連携"}
-        </Button>
       </div>
 
       {/* Step 2: account OAuth (user action) */}
       <div className="border-t border-white/8 pt-4">
         <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">
-          ステップ2: 投稿アカウントを連携（本人ログイン）
+          ステップ2: Instagramでログインして連携
         </p>
         {oauth.connected ? (
           <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
             <Check size={16} />
-            <span>
-              連携済み{oauth.account ? `: @${oauth.account}` : ""}
-              {oauth.page ? `（${oauth.page}）` : ""}
-            </span>
+            <span>連携済み{oauth.account ? `: @${oauth.account}` : ""}</span>
           </div>
         ) : (
           <a href="/api/auth/instagram/login" className="block">
-            <Button className="w-full" variant="soft">
+            <Button className="w-full">
               <LogIn size={16} /> Instagramでログインして連携
             </Button>
           </a>
         )}
-        <p className="mt-2 text-[10px] leading-relaxed text-[var(--fg-faint)]">
-          対象は「プロアカウント（ビジネス/クリエイター）」です。Instagramアプリ設定の
-          「OAuthリダイレクトURI」に
-          <code className="mx-1 text-[var(--brand-2)]">{`<本番URL>`}/api/auth/instagram/callback</code>
-          の登録が必要です。
+      </div>
+
+      {/* Required dashboard setup */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <p className="mb-1.5 text-[11px] font-bold">Instagramアプリ側で必要な設定</p>
+        <p className="text-[10px] leading-relaxed text-[var(--fg-faint)]">
+          対象は「プロアカウント（ビジネス/クリエイター）」。アプリの「Instagramログインのビジネス向け設定」→
+          OAuthリダイレクトURIに下記を登録してください。
         </p>
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2 font-mono text-[10px]">
+          <span className="flex-1 truncate text-[var(--fg-dim)]">{callbackUrl}</span>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(callbackUrl);
+              showToast("リダイレクトURIをコピーしました");
+            }}
+            className="rounded-md bg-white/8 p-1.5"
+          >
+            <Copy size={12} />
+          </button>
+        </div>
       </div>
 
       <a
