@@ -135,3 +135,37 @@
 
 - 秘書室のケース記録: `.company/secretary/experience/case-009〜011`（snsagent構築・診断・STEP1）
 - TODO: `.company/secretary/todos/2026-06-10.md`
+
+---
+
+## 10. 2026-06-11 セッション追記（引き継ぎ更新）
+
+> 別マシン（`C:\Users\hirum\snsagent`）で継続作業。GitHub main にコミット済み＝**git＝本番＝ローカルが同期**。
+> ⚠️ §2 の「git pushでは自動デプロイされない／`vercel --prod`手動」は不変。今回も毎回 `vercel --prod --yes --scope shin-s-projects18` で反映済み。
+
+### 今回やったこと
+
+**A) ストーリーズの文字焼き込み（§7C-4 を解決）** — commit `5ba13de` → `9b0cc0e`
+- Instagram APIはストーリーズにテキスト/スタンプを載せられない仕様 → **クライアントCanvasで1080x1920に焼き込む**方式で実装。
+- `src/lib/story-image.ts`（新規）= `composeStoryImage()`。背景=写真をぼかしたcover＋本写真contain、文字を読みやすさパネル付きで描画。
+- 焼き込める要素: **見出し / サブ見出し / キャプション / ハッシュタグ**（各ON/OFF）。**文字位置（上/中央/下）**＋**文字色5色**（パネル/シャドウは自動コントラスト）。
+- `create/page.tsx`: story選択時に9:16プレビュー（=WYSIWYG＝投稿画像）。投稿時は元写真でなく焼き込み画像をアップロード。
+- フィード/リールの挙動は不変。**予約自動投稿(cron)で焼くにはサーバー側合成が別途必要**（§7C-1/2とセット）。
+
+**B) GBP連携を本物のGoogle OAuthに作り替え（§7C-3 の接続部分を実装）** — commit `9ce3c75`
+- 旧: 無効スタブ＋`ya29...`アクセストークン手貼り（1時間失効）→ **撤去**。
+- 新ルート: `/api/auth/google/login`・`/callback`（scope `business.manage`, `access_type=offline`＝refresh token取得, httpOnly Cookie保管）、`/api/integrations/gbp/config`・`status`、`/api/gbp/locations`（店舗一覧）。ヘルパー `src/lib/gbp.ts`。
+- `settings/page.tsx`: `GbpConnect`コンポーネント（3ステップUI: 認証情報→Googleで連携→店舗選択）。店舗一覧APIが未承認なら`needsApproval`を返し**手動ロケーションID入力にフォールバック**。
+- 本番env設定済み（Vercel Production）: **`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`**。OAuthクライアント=「ウェブ クライアント 2」(`882085190545-qv4p...`)。リダイレクトURI: `https://snsagent-orcin.vercel.app/api/auth/google/callback`。
+- OAuth同意画面は **External＋テストユーザーに `hiruma20231111@gmail.com`** を登録（`org_internal`エラー対処）。
+- ⚠️ **セキュリティ**: client_secret を一度チャットに貼ったため、落ち着いたら**再生成→Vercel更新**推奨。
+
+### まだ残っている最優先
+
+1. **(A) DM表示**（§7A）は**未着手のまま**。受信ボックス紫バナーの「詳細: ◯◯」エラー文待ち。
+2. **GBP: Business Profile API の利用申請（allowlisting）** — 承認まで店舗一覧/local posts投稿は弾かれる。申請フォーム（project番号 `882085190545`）。承認後に `/api/gbp/post`（local posts作成）を実装すれば全自動投稿が解禁。
+3. §7C-1 トークンのDB保存（cron/予約自動投稿の前提）。GBPもIGも現状Cookie保管。
+
+### 新規/変更ファイル
+- 新規: `src/lib/story-image.ts`, `src/lib/gbp.ts`, `src/app/api/auth/google/{login,callback}/route.ts`, `src/app/api/integrations/gbp/{config,status}/route.ts`, `src/app/api/gbp/locations/route.ts`
+- 変更: `src/app/(app)/create/page.tsx`, `src/app/(app)/settings/page.tsx`
