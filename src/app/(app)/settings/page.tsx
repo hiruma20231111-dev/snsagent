@@ -312,7 +312,7 @@ export default function SettingsPage() {
 
       <BottomSheet open={sheet === "gemini"} onClose={() => setSheet(null)} title="AI（Gemini）設定">
         <ConnectForm
-          intro="キャプションとバナー文字の自動生成に使います。コスト最小のミドルクラスモデル（Gemini 1.5 Flash）を想定。"
+          intro="キャプションとバナー文字の自動生成に使います。コスト最小のFlash系モデル（Gemini 2.5 Flash）を使用。"
           docLabel="Google AI Studio でキー発行"
           docUrl="https://aistudio.google.com/apikey"
           fields={[{ key: "geminiKey", label: "Gemini APIキー", placeholder: "AIza... から始まるキー", secret: true }]}

@@ -88,12 +88,16 @@ export class MockAdapter implements AIProvider {
 }
 
 /**
- * Real provider placeholder. Wire GEMINI_API_KEY and uncomment the
- * fetch to go live — the rest of the app needs no changes.
+ * Real Gemini provider. Tries current Flash models in order (1.5 Flash was
+ * retired, so a saved key would silently fall back to mock otherwise). On a
+ * genuine failure it degrades to the local copywriter but records WHY in the
+ * model label so the UI can show it instead of pretending nothing happened.
  */
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+
 export class GeminiFlashAdapter implements AIProvider {
-  readonly id = "gemini-1.5-flash";
-  readonly label = "Gemini 1.5 Flash";
+  readonly id = "gemini-flash";
+  readonly label = "Gemini Flash";
   constructor(
     private apiKey: string,
     private imageBase64?: string,
@@ -121,42 +125,58 @@ export class GeminiFlashAdapter implements AIProvider {
       parts.push({ inline_data: { mime_type: this.mimeType, data: this.imageBase64 } });
     }
 
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: { temperature: 0.9, responseMimeType: "application/json" },
-          }),
-          cache: "no-store",
+    let lastError = "原因不明";
+    for (const model of GEMINI_MODELS) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: { temperature: 0.9, responseMimeType: "application/json" },
+            }),
+            cache: "no-store",
+          }
+        );
+        const data = (await res.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+          error?: { message?: string; status?: string };
+        };
+        if (data.error) {
+          lastError = data.error.message ?? data.error.status ?? "APIエラー";
+          // NOT_FOUND on a model → try the next candidate; other errors
+          // (bad key / quota) won't be fixed by switching models, so stop.
+          if (/not.?found|not supported|is not found/i.test(lastError)) continue;
+          break;
         }
-      );
-      const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-        error?: { message?: string };
-      };
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error(data.error?.message ?? "no content");
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          lastError = "応答が空でした";
+          continue;
+        }
 
-      const parsed = JSON.parse(text) as Partial<AIAnalysis> & { hashtags?: string[] };
-      const grad =
-        "linear-gradient(135deg,#ff7a45,#ff2e74)"; // banner photo overlays this
-      return {
-        title: parsed.title ?? "今日のおすすめ",
-        subtitle: parsed.subtitle ?? "",
-        caption: parsed.caption ?? "",
-        hashtags: parsed.hashtags ?? [],
-        emoji: parsed.emoji ?? "✨",
-        banner: grad,
-        model: this.label,
-      };
-    } catch {
-      // Network/parse failure — degrade gracefully to the local copywriter.
-      return new MockAdapter().analyzePhoto(input);
+        const parsed = JSON.parse(text) as Partial<AIAnalysis> & { hashtags?: string[] };
+        const grad = "linear-gradient(135deg,#ff7a45,#ff2e74)"; // banner photo overlays this
+        return {
+          title: parsed.title ?? "今日のおすすめ",
+          subtitle: parsed.subtitle ?? "",
+          caption: parsed.caption ?? "",
+          hashtags: parsed.hashtags ?? [],
+          emoji: parsed.emoji ?? "✨",
+          banner: grad,
+          model: `Gemini Flash (${model})`,
+        };
+      } catch (e) {
+        lastError = String(e);
+      }
     }
+
+    // Genuine failure — degrade to the local copywriter but keep the reason
+    // visible so a misconfigured key isn't mistaken for "working".
+    const fallback = await new MockAdapter().analyzePhoto(input);
+    return { ...fallback, model: `ローカル生成（Gemini接続失敗: ${lastError}）` };
   }
 }
 
