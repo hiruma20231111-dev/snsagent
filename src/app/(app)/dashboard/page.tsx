@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -9,16 +10,47 @@ import {
   CalendarClock,
   BarChart3,
   Sparkles,
+  Users,
+  UserPlus,
+  Eye,
+  Grid3x3,
+  Loader2,
 } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { Page, SectionTitle } from "@/components/ui";
 import { useApp } from "@/lib/store";
+
+interface Insights {
+  connected: boolean;
+  username?: string | null;
+  accountType?: string | null;
+  followersCount?: number | null;
+  followsCount?: number | null;
+  mediaCount?: number | null;
+  reach7d?: number | null;
+  insightsAvailable?: boolean;
+  error?: string;
+}
 
 export default function Dashboard() {
   const { company, schedules, assets } = useApp();
   const igConnected = company.connected.instagram;
   const scheduled = schedules.filter((s) => s.status === "scheduled").length;
   const published = schedules.filter((s) => s.status === "published").length;
+
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [loadingInsights, setLoadingInsights] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/insights")
+      .then((r) => r.json())
+      .then(setInsights)
+      .catch(() => setInsights(null))
+      .finally(() => setLoadingInsights(false));
+  }, []);
+
+  const hasRealStats =
+    insights?.connected && typeof insights.followersCount === "number";
 
   return (
     <Page>
@@ -82,23 +114,64 @@ export default function Dashboard() {
         </Link>
       </motion.div>
 
-      {/* Analytics placeholder (real insights come later) */}
+      {/* Real Instagram analytics */}
       <div className="mt-5">
-        <SectionTitle>分析</SectionTitle>
-        {published === 0 ? (
+        <SectionTitle>
+          {hasRealStats ? `分析（${insights?.username ? "@" + insights.username : "Instagram"}）` : "分析"}
+        </SectionTitle>
+
+        {loadingInsights ? (
+          <div className="glass flex items-center justify-center gap-2 py-10 text-[var(--fg-faint)]">
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-sm">Instagramから取得中…</span>
+          </div>
+        ) : hasRealStats ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <RealStat
+                icon={<Users size={16} />}
+                label="フォロワー"
+                value={insights?.followersCount}
+              />
+              <RealStat
+                icon={<UserPlus size={16} />}
+                label="フォロー中"
+                value={insights?.followsCount}
+              />
+              <RealStat
+                icon={<Grid3x3 size={16} />}
+                label="投稿"
+                value={insights?.mediaCount}
+              />
+              <RealStat
+                icon={<Eye size={16} />}
+                label="リーチ(7日)"
+                value={insights?.reach7d}
+                fallback={insights?.insightsAvailable ? undefined : "—"}
+              />
+            </div>
+            <p className="mt-2 text-center text-[10px] text-[var(--fg-faint)]">
+              {insights?.username ? `@${insights.username} の実データ` : "実データ"}
+              {!insights?.insightsAvailable &&
+                "・リーチ等の詳細インサイトは数日分のデータが溜まると表示されます"}
+            </p>
+          </>
+        ) : igConnected ? (
           <div className="glass flex flex-col items-center gap-2 py-10 text-center">
             <BarChart3 size={28} className="text-[var(--fg-faint)]" />
-            <p className="text-sm font-bold">まだデータがありません</p>
-            <p className="max-w-[240px] text-[12px] text-[var(--fg-faint)]">
-              投稿を始めると、フォロワー推移やエンゲージメントがここに表示されます。
+            <p className="text-sm font-bold">数字を取得できませんでした</p>
+            <p className="max-w-[260px] text-[12px] text-[var(--fg-faint)]">
+              {insights?.error
+                ? "Instagram: " + insights.error
+                : "少し時間をおいて再読み込みしてください。"}
             </p>
           </div>
         ) : (
           <div className="glass flex flex-col items-center gap-2 py-10 text-center">
-            <BarChart3 size={28} className="text-[var(--brand-2)]" />
-            <p className="text-sm font-bold">データ収集中…</p>
-            <p className="max-w-[260px] text-[12px] text-[var(--fg-faint)]">
-              Instagramインサイトの取り込みは順次対応します。
+            <BarChart3 size={28} className="text-[var(--fg-faint)]" />
+            <p className="text-sm font-bold">まだデータがありません</p>
+            <p className="max-w-[240px] text-[12px] text-[var(--fg-faint)]">
+              Instagramを連携すると、フォロワー数やリーチがここに表示されます。
             </p>
           </div>
         )}
@@ -173,5 +246,32 @@ function CountCard({
       </p>
       <p className="mt-1 text-2xl font-black">{value}</p>
     </div>
+  );
+}
+
+function RealStat({
+  icon,
+  label,
+  value,
+  fallback,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | null | undefined;
+  fallback?: string;
+}) {
+  const display =
+    typeof value === "number" ? value.toLocaleString() : fallback ?? "—";
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="glass p-4"
+    >
+      <p className="flex items-center gap-1 text-[11px] text-[var(--fg-faint)]">
+        {icon} {label}
+      </p>
+      <p className="mt-1 text-2xl font-black">{display}</p>
+    </motion.div>
   );
 }
