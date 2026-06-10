@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Send, Sparkles, Bot, Zap } from "lucide-react";
+import { MapPin, Send, Sparkles, Bot, Zap, Loader2 } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { Page, BottomSheet, Chip } from "@/components/ui";
 import { useApp } from "@/lib/store";
@@ -11,10 +11,64 @@ import type { Conversation } from "@/lib/types";
 type Filter = "all" | "unread" | "instagram" | "gbp";
 
 export default function InboxPage() {
-  const { conversations, rules, replyToConversation, markConversationRead, showToast } =
-    useApp();
+  const { conversations: localConvos, rules, showToast } = useApp();
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Conversation | null>(null);
+
+  // Real comments pulled from Instagram (graph.instagram.com). Falls back to
+  // the local store conversations when the account isn't connected here.
+  const [serverConvos, setServerConvos] = useState<Conversation[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/inbox")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.connected && Array.isArray(d.conversations)) {
+          setServerConvos(d.conversations as Conversation[]);
+        } else {
+          setServerConvos(null);
+        }
+      })
+      .catch(() => setServerConvos(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Local optimistic overlay for read/reply actions on server data.
+  const [overrides, setOverrides] = useState<
+    Record<string, { unread?: boolean; autoReplied?: boolean; extra?: Conversation["thread"] }>
+  >({});
+
+  const baseConvos = serverConvos ?? localConvos;
+  const conversations: Conversation[] = baseConvos.map((c) => {
+    const o = overrides[c.id];
+    if (!o) return c;
+    return {
+      ...c,
+      unread: o.unread ?? c.unread,
+      autoReplied: o.autoReplied ?? c.autoReplied,
+      thread: o.extra ? [...c.thread, ...o.extra] : c.thread,
+      lastMessage: o.extra?.length ? o.extra[o.extra.length - 1].text : c.lastMessage,
+    };
+  });
+
+  function markConversationRead(id: string) {
+    setOverrides((p) => ({ ...p, [id]: { ...p[id], unread: false } }));
+  }
+  function replyToConversation(id: string, text: string, auto = false) {
+    setOverrides((p) => ({
+      ...p,
+      [id]: {
+        ...p[id],
+        unread: false,
+        autoReplied: auto || p[id]?.autoReplied,
+        extra: [
+          ...(p[id]?.extra ?? []),
+          { from: "us" as const, text, auto, at: new Date().toISOString() },
+        ],
+      },
+    }));
+  }
 
   const filtered = conversations.filter((c) => {
     if (filter === "unread") return c.unread;
@@ -86,12 +140,18 @@ export default function InboxPage() {
       </div>
 
       {/* list */}
-      {filtered.length === 0 && (
+      {loading && (
+        <div className="glass mt-4 flex items-center justify-center gap-2 py-12 text-[var(--fg-faint)]">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-sm">Instagramから取得中…</span>
+        </div>
+      )}
+      {!loading && filtered.length === 0 && (
         <div className="glass mt-4 flex flex-col items-center gap-2 py-12 text-center">
           <Bot size={28} className="text-[var(--fg-faint)]" />
           <p className="text-sm font-bold">受信はまだありません</p>
           <p className="max-w-[250px] text-[12px] text-[var(--fg-faint)]">
-            Instagramに届いたDM・コメントがここに集約され、自動応答できるようになります。
+            投稿に届いたコメントがここに集約されます。DM受信は申請後に対応予定です。
           </p>
         </div>
       )}

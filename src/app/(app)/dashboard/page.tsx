@@ -32,14 +32,35 @@ interface Insights {
   error?: string;
 }
 
+interface IgPost {
+  id: string;
+  caption: string | null;
+  mediaType: string | null;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  permalink: string | null;
+  timestamp: string | null;
+  likeCount: number | null;
+  commentsCount: number | null;
+}
+
 export default function Dashboard() {
-  const { company, schedules, assets } = useApp();
+  const { company, schedules } = useApp();
   const igConnected = company.connected.instagram;
   const scheduled = schedules.filter((s) => s.status === "scheduled").length;
-  const published = schedules.filter((s) => s.status === "published").length;
 
   const [insights, setInsights] = useState<Insights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(true);
+  const [posts, setPosts] = useState<IgPost[] | null>(null);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  // "投稿済" reflects the real number of posts on the connected account
+  // (so a successful "今すぐ投稿" actually shows up here). Falls back to the
+  // local published-schedule count when not connected.
+  const published =
+    typeof insights?.mediaCount === "number"
+      ? insights.mediaCount
+      : schedules.filter((s) => s.status === "published").length;
 
   useEffect(() => {
     fetch("/api/insights")
@@ -47,6 +68,11 @@ export default function Dashboard() {
       .then(setInsights)
       .catch(() => setInsights(null))
       .finally(() => setLoadingInsights(false));
+    fetch("/api/media")
+      .then((r) => r.json())
+      .then((d) => setPosts(Array.isArray(d.posts) ? d.posts : null))
+      .catch(() => setPosts(null))
+      .finally(() => setLoadingPosts(false));
   }, []);
 
   const hasRealStats =
@@ -177,22 +203,56 @@ export default function Dashboard() {
         )}
       </div>
 
-      {assets.length > 0 && (
-        <div className="mt-5">
-          <SectionTitle>つくった投稿 ({assets.length})</SectionTitle>
-          <div className="grid grid-cols-3 gap-2">
-            {assets.slice(0, 6).map((a) => (
-              <div
-                key={a.id}
-                className="flex aspect-square items-center justify-center rounded-2xl text-2xl"
-                style={{ background: a.banner }}
+      {/* Real Instagram posts feed */}
+      <div className="mt-5">
+        <SectionTitle>最近の投稿{posts && posts.length > 0 ? ` (${posts.length})` : ""}</SectionTitle>
+        {loadingPosts ? (
+          <div className="glass flex items-center justify-center gap-2 py-8 text-[var(--fg-faint)]">
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-sm">投稿を取得中…</span>
+          </div>
+        ) : posts && posts.length > 0 ? (
+          <div className="grid grid-cols-3 gap-2 lg:grid-cols-4">
+            {posts.map((p) => (
+              <a
+                key={p.id}
+                href={p.permalink ?? "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="group relative aspect-square overflow-hidden rounded-2xl bg-white/5"
               >
-                {a.emoji}
-              </div>
+                {p.thumbnailUrl || p.mediaUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={(p.thumbnailUrl ?? p.mediaUrl) as string}
+                    alt={p.caption ?? ""}
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[var(--fg-faint)]">
+                    <Grid3x3 size={20} />
+                  </div>
+                )}
+                {typeof p.commentsCount === "number" && (
+                  <span className="absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur">
+                    💬 {p.commentsCount}
+                  </span>
+                )}
+              </a>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="glass flex flex-col items-center gap-2 py-8 text-center">
+            <Grid3x3 size={26} className="text-[var(--fg-faint)]" />
+            <p className="text-sm font-bold">表示できる投稿がありません</p>
+            <p className="max-w-[260px] text-[12px] text-[var(--fg-faint)]">
+              {igConnected
+                ? "投稿するとここに表示されます。"
+                : "Instagramを連携すると、実際の投稿がここに並びます。"}
+            </p>
+          </div>
+        )}
+      </div>
     </Page>
   );
 }
