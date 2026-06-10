@@ -17,6 +17,7 @@ import { Page, Button, Chip } from "@/components/ui";
 import { useApp } from "@/lib/store";
 import type { AIAnalysis, Channel, PostFormat } from "@/lib/types";
 import { BANNER_GRADIENTS } from "@/lib/mock-data";
+import { composeStoryImage, type StoryTextPos } from "@/lib/story-image";
 
 type Step = "upload" | "analyzing" | "edit";
 
@@ -40,6 +41,12 @@ export default function CreatePage() {
   const [format, setFormat] = useState<PostFormat>("feed");
   const [publishing, setPublishing] = useState(false);
 
+  // Story mode: text is burned into a 1080x1920 image (the IG API can't add
+  // overlays to Stories). storyImage is the WYSIWYG composite = what we post.
+  const [storyPos, setStoryPos] = useState<StoryTextPos>("bottom");
+  const [storyImage, setStoryImage] = useState<string | null>(null);
+  const [storyRendering, setStoryRendering] = useState(false);
+
   // Real Instagram profile (name / bio / area) to ground AI copy.
   type Profile = { name?: string | null; username?: string | null; biography?: string | null; website?: string | null };
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -49,6 +56,29 @@ export default function CreatePage() {
       .then((d) => setProfile(d.profile ?? null))
       .catch(() => setProfile(null));
   }, []);
+
+  // Re-render the burned-in Story image (debounced) whenever the photo, text
+  // or placement changes while Story format is selected. This composite is
+  // both the preview and exactly what gets uploaded.
+  useEffect(() => {
+    if (format !== "story" || !photo) return;
+    let cancelled = false;
+    setStoryRendering(true);
+    const t = setTimeout(() => {
+      composeStoryImage({ photo, title, subtitle, position: storyPos })
+        .then((url) => {
+          if (!cancelled) setStoryImage(url);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setStoryRendering(false);
+        });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [format, photo, title, subtitle, storyPos]);
 
   function onPick(file: File) {
     setFilename(file.name);
@@ -116,10 +146,18 @@ export default function CreatePage() {
         showToast("先に設定からInstagram連携をしてください");
         return;
       }
+      // Stories carry no caption — the only way text shows is to burn it
+      // into the image. Upload the composite (fall back to a fresh render).
+      let imageToUpload = photo;
+      if (format === "story") {
+        imageToUpload =
+          storyImage ??
+          (await composeStoryImage({ photo, title, subtitle, position: storyPos }));
+      }
       const up = await fetch("/api/upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dataUrl: photo }),
+        body: JSON.stringify({ dataUrl: imageToUpload }),
       }).then((r) => r.json());
       if (!up.ok) {
         showToast(up.error ?? "画像アップロードに失敗しました");
@@ -320,6 +358,48 @@ export default function CreatePage() {
 
             <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
             <div className="lg:sticky lg:top-6">
+            {format === "story" ? (
+              <>
+                {/* Story preview — 9:16, text BURNED into the image (WYSIWYG).
+                    This composite is exactly what gets posted. */}
+                <div className="relative mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-2xl bg-black/40 lg:max-w-[300px]">
+                  {storyImage ? (
+                    <img src={storyImage} alt="ストーリーズ プレビュー" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="shimmer h-full w-full" />
+                  )}
+                  {storyRendering && (
+                    <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
+                      生成中…
+                    </div>
+                  )}
+                </div>
+
+                {/* Text placement (kept inside IG's safe zone) */}
+                <p className="mt-3 text-center text-[11px] font-semibold text-[var(--fg-faint)]">
+                  文字の位置
+                </p>
+                <div className="mt-1.5 flex justify-center gap-2">
+                  {(
+                    [
+                      ["top", "上"],
+                      ["center", "中央"],
+                      ["bottom", "下"],
+                    ] as [StoryTextPos, string][]
+                  ).map(([pos, label]) => (
+                    <Chip key={pos} active={storyPos === pos} onClick={() => setStoryPos(pos)}>
+                      {label}
+                    </Chip>
+                  ))}
+                </div>
+                <p className="mt-2 text-center text-[10px] leading-relaxed text-[var(--fg-faint)]">
+                  Instagramの仕様上、ストーリーズには文字を直接載せられないため、
+                  <br className="hidden lg:block" />
+                  見出し・サブ見出しを画像に焼き込みます（上下はUI領域を避けて配置）。
+                </p>
+              </>
+            ) : (
+              <>
             {/* Banner preview (Auto-fit headline over photo) */}
             <div
               className="relative mx-auto aspect-square w-full max-w-[320px] overflow-hidden rounded-2xl lg:max-w-[420px]"
@@ -365,6 +445,8 @@ export default function CreatePage() {
                 />
               ))}
             </div>
+              </>
+            )}
             </div>
 
             <div className="min-w-0">
