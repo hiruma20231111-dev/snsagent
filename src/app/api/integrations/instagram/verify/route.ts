@@ -2,69 +2,64 @@ import { NextResponse } from "next/server";
 
 // POST /api/integrations/instagram/verify
 // ------------------------------------------------------------
-// Validates a Meta (Instagram Graph API) app's credentials by
-// requesting an APP access token via the client_credentials grant.
-// This is a pure server-to-server call — the App Secret never
-// touches the browser. A success proves the App ID + Secret pair
-// is valid; it does NOT grant posting (that needs user OAuth).
+// "Instagram API with Instagram Login" flavor.
+// There is no client_credentials grant here, so we validate the
+// App ID by asking Instagram's authorize endpoint whether it
+// recognises the client: a valid app 302-redirects to the
+// authorization screen; an unknown app returns an error.
+// (The App Secret can only be checked at token-exchange, which
+// requires the user to log in — that happens in the OAuth step.)
 //
-// Body (optional): { appId, appSecret }
-// Falls back to env META_APP_ID / META_APP_SECRET when omitted.
+// Body (optional): { appId }. Falls back to env.
 // ------------------------------------------------------------
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const IG_AUTHORIZE = "https://www.instagram.com/oauth/authorize";
 
 export async function POST(req: Request) {
-  let body: { appId?: string; appSecret?: string } = {};
+  let body: { appId?: string } = {};
   try {
     body = await req.json();
   } catch {
-    /* empty body ok */
+    /* empty ok */
   }
 
-  const appId = body.appId || process.env.META_APP_ID;
-  const appSecret = body.appSecret || process.env.META_APP_SECRET;
-
-  if (!appId || !appSecret) {
-    return NextResponse.json(
-      { ok: false, error: "App ID と App Secret を入力してください。" },
-      { status: 400 }
-    );
+  const appId =
+    body.appId || process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID;
+  if (!appId) {
+    return NextResponse.json({ ok: false, error: "App ID を入力してください。" }, { status: 400 });
   }
+
+  const origin = new URL(req.url).origin;
+  const redirectUri = `${origin}/api/auth/instagram/callback`;
+  const url =
+    `${IG_AUTHORIZE}?client_id=${encodeURIComponent(appId)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=instagram_business_basic&response_type=code`;
 
   try {
-    const url =
-      `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}` +
-      `&client_secret=${encodeURIComponent(appSecret)}&grant_type=client_credentials`;
-    const res = await fetch(url, { cache: "no-store" });
-    const data = (await res.json()) as {
-      access_token?: string;
-      error?: { message?: string };
-    };
+    const res = await fetch(url, { redirect: "manual", cache: "no-store" });
+    const loc = res.headers.get("location") ?? "";
+    const recognised =
+      (res.status === 302 || res.status === 301) &&
+      /instagram\.com\/(oauth\/authorize|accounts\/login)/.test(loc) &&
+      !/error/i.test(loc);
 
-    if (!res.ok || !data.access_token) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            data.error?.message ??
-            "認証に失敗しました。App ID / App Secret をご確認ください。",
-        },
-        { status: 200 }
-      );
+    if (recognised) {
+      return NextResponse.json({
+        ok: true,
+        appId,
+        message:
+          "Instagramアプリを認識しました（App ID有効）。あとはログインで投稿連携が完了します。",
+      });
     }
-
-    // Mask the token before returning — never expose the raw secret/token.
-    const masked = data.access_token.replace(/\|.*/, "|••••••");
     return NextResponse.json({
-      ok: true,
-      appId,
-      appTokenPreview: masked,
-      message: "Instagram(Meta)アプリの認証に成功しました。キーは有効です。",
+      ok: false,
+      error:
+        "このApp IDがInstagramで認識されませんでした。Instagramアプリの設定をご確認ください。",
     });
   } catch (e) {
     return NextResponse.json(
-      { ok: false, error: "Facebookへの問い合わせに失敗しました: " + String(e) },
+      { ok: false, error: "Instagramへの問い合わせに失敗しました: " + String(e) },
       { status: 200 }
     );
   }

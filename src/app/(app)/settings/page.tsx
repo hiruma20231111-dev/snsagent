@@ -504,7 +504,7 @@ function InstagramConnect() {
       <div className="flex items-start gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3">
         <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--brand-2)]" />
         <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
-          Meta（Instagram Graph API）アプリの認証情報を入力します。App Secret は
+          Instagram API（Instagramログイン方式）の認証情報を入力します。App Secret は
           サーバー側でのみ使用し、ブラウザには保存しません。
         </p>
       </div>
@@ -573,14 +573,14 @@ function InstagramConnect() {
         ) : (
           <a href="/api/auth/instagram/login" className="block">
             <Button className="w-full" variant="soft">
-              <LogIn size={16} /> Facebookログインで投稿連携
+              <LogIn size={16} /> Instagramでログインして連携
             </Button>
           </a>
         )}
         <p className="mt-2 text-[10px] leading-relaxed text-[var(--fg-faint)]">
-          対象は「プロアカウント（ビジネス/クリエイター）」＋Facebookページ連携が前提です。
-          Metaアプリの「有効なOAuthリダイレクトURI」に
-          <code className="mx-1 text-[var(--brand-2)]">/api/auth/instagram/callback</code>
+          対象は「プロアカウント（ビジネス/クリエイター）」です。Instagramアプリ設定の
+          「OAuthリダイレクトURI」に
+          <code className="mx-1 text-[var(--brand-2)]">{`<本番URL>`}/api/auth/instagram/callback</code>
           の登録が必要です。
         </p>
       </div>

@@ -1,41 +1,35 @@
 import { NextResponse } from "next/server";
 
 // GET /api/auth/instagram/login
-// Kicks off the Facebook OAuth dialog for Instagram Graph API.
-// The user logs in & authorizes; Facebook redirects back to /callback.
-// Requires META_APP_ID (and the redirect URI registered in the Meta app).
+// "Instagram API with Instagram Login" — sends the user to Instagram's
+// own authorization screen (no Facebook Page required). On approval,
+// Instagram redirects back to /callback with a code.
 
-const OAUTH_DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
+const IG_AUTHORIZE = "https://www.instagram.com/oauth/authorize";
 const SCOPES = [
-  "instagram_basic",
-  "instagram_content_publish",
-  "instagram_manage_comments",
-  "instagram_manage_insights",
-  "pages_show_list",
-  "pages_read_engagement",
-  "business_management",
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_comments",
+  "instagram_business_manage_insights",
 ].join(",");
 
 export async function GET(req: Request) {
-  const appId = process.env.META_APP_ID;
+  const appId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID;
   const origin = new URL(req.url).origin;
   const redirectUri = `${origin}/api/auth/instagram/callback`;
 
   if (!appId) {
-    return NextResponse.redirect(
-      `${origin}/settings?ig=error&reason=missing_app_id`
-    );
+    return NextResponse.redirect(`${origin}/settings?ig=error&reason=missing_app_id`);
   }
 
   const state = crypto.randomUUID();
   const url =
-    `${OAUTH_DIALOG}?client_id=${encodeURIComponent(appId)}` +
+    `${IG_AUTHORIZE}?client_id=${encodeURIComponent(appId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(SCOPES)}` +
     `&response_type=code&state=${state}`;
 
   const res = NextResponse.redirect(url);
-  // CSRF guard — verified on callback.
   res.cookies.set("ig_oauth_state", state, {
     httpOnly: true,
     secure: true,
