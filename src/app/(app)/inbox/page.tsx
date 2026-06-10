@@ -21,6 +21,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   // Hint shown when DMs require the extra scope / Instagram messages toggle.
   const [dmNeedsSetup, setDmNeedsSetup] = useState(false);
+  const [dmError, setDmError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -39,6 +40,7 @@ export default function InboxPage() {
         ].sort((a, b) => (a.at < b.at ? 1 : -1));
         setServerConvos(merged);
         if (dms?.needsSetup) setDmNeedsSetup(true);
+        if (dms?.error) setDmError(dms.error as string);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -151,11 +153,24 @@ export default function InboxPage() {
       {/* DM setup hint */}
       {dmNeedsSetup && (
         <div className="mt-4 rounded-2xl border border-[var(--brand-3)]/30 bg-[var(--brand-3)]/10 p-3">
-          <p className="text-[12px] font-bold text-[var(--brand-2)]">DMを表示するには、あと1ステップ</p>
+          <p className="text-[12px] font-bold text-[var(--brand-2)]">DMを表示するには、あと2ステップ</p>
           <p className="mt-1 text-[11px] leading-relaxed text-[var(--fg-dim)]">
-            ① 設定から再ログインしてメッセージ権限を許可 ② Instagramアプリの
-            「設定 → メッセージとストーリーズへの返信 → 連携ツール」でメッセージへのアクセスをオンにしてください。
+            ① 下のボタンで<b>再ログイン</b>してメッセージ権限を許可（重要：権限追加後は再ログインが必須）<br />
+            ② Instagramアプリの「設定とプライバシー → メッセージとストーリーズへの返信 → 連携ツール」で
+            メッセージへのアクセスを<b>オン</b>に。
           </p>
+          <a
+            href="/api/auth/instagram/login"
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-bold text-white"
+            style={{ background: "var(--grad-brand)" }}
+          >
+            Instagramに再ログインして権限を更新
+          </a>
+          {dmError && (
+            <p className="mt-2 break-words rounded-lg bg-black/30 px-2.5 py-1.5 font-mono text-[10px] text-[var(--fg-faint)]">
+              詳細: {dmError}
+            </p>
+          )}
         </div>
       )}
 

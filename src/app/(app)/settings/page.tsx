@@ -500,9 +500,17 @@ function InstagramConnect() {
           ステップ2: Instagramでログインして連携
         </p>
         {oauth.connected ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
-            <Check size={16} />
-            <span>連携済み{oauth.account ? `: @${oauth.account}` : ""}</span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
+              <Check size={16} />
+              <span>連携済み{oauth.account ? `: @${oauth.account}` : ""}</span>
+            </div>
+            <a
+              href="/api/auth/instagram/login"
+              className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/12 bg-white/5 py-2.5 text-[12px] font-semibold text-[var(--fg-dim)]"
+            >
+              <RotateCcw size={13} /> 再ログインして権限を更新（DM権限の追加時など）
+            </a>
           </div>
         ) : (
           <a href="/api/auth/instagram/login" className="block">

@@ -45,9 +45,10 @@ export async function GET() {
       myId = me.user_id ?? me.id ?? "";
     }
 
-    // 1) conversation list
+    // 1) conversation list (Instagram-Login API: graph.instagram.com, no
+    //    `platform` param — that param is for the Facebook-Page messaging API)
     const convRes = await fetch(
-      `${GRAPH}/me/conversations?platform=instagram&fields=id,updated_time&limit=${CONV_LIMIT}&access_token=${token}`,
+      `${GRAPH}/me/conversations?fields=id,updated_time&limit=${CONV_LIMIT}&access_token=${token}`,
       { cache: "no-store" }
     );
     const convJson = (await convRes.json()) as {
