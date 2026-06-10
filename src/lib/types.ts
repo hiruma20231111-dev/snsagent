@@ -24,6 +24,8 @@ export interface Company {
 
 export interface Credentials {
   // Instagram Graph API (Meta)
+  igAppId?: string; // public App ID (safe to store; App Secret is server-only)
+  igAppVerified?: boolean; // app credentials validated against Facebook
   igAccessToken?: string;
   igBusinessId?: string;
   // Google Business Profile

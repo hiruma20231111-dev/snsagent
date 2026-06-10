@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MapPin,
@@ -18,6 +18,8 @@ import {
   ChevronRight,
   ShieldCheck,
   ExternalLink,
+  Loader2,
+  LogIn,
 } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { Page, SectionTitle, Toggle, Button, BottomSheet } from "@/components/ui";
@@ -52,7 +54,7 @@ export default function SettingsPage() {
     setCompany({ closedDays: next });
   }
 
-  const igConnected = !!cred.igAccessToken;
+  const igConnected = !!cred.igAppVerified || !!cred.igAccessToken;
   const gbpConnected = !!cred.gbpAccessToken;
 
   return (
@@ -75,7 +77,7 @@ export default function SettingsPage() {
                 grad="linear-gradient(135deg,#ff7a45,#ff2e74)"
                 icon={<Instagram size={18} />}
                 title="Instagram"
-                desc={igConnected ? "投稿・受信が有効" : "投稿には連携が必要です"}
+                desc={igConnected ? "アプリ認証済み・アカウント連携へ" : "App ID/Secretで連携します"}
                 connected={igConnected}
                 onClick={() => setSheet("instagram")}
               />
@@ -286,23 +288,7 @@ export default function SettingsPage() {
 
       {/* ===== Integration sheets ===== */}
       <BottomSheet open={sheet === "instagram"} onClose={() => setSheet(null)} title="Instagram 連携">
-        <ConnectForm
-          intro="Instagram Graph API（Meta）で取得した情報を入力します。対象は「プロアカウント（ビジネス/クリエイター）」で、Facebookページとの連携が必要です。"
-          docLabel="Meta for Developers を開く"
-          docUrl="https://developers.facebook.com/"
-          fields={[
-            { key: "igAccessToken", label: "アクセストークン", placeholder: "EAAB... から始まる長期トークン", secret: true },
-            { key: "igBusinessId", label: "Instagram ビジネスアカウントID", placeholder: "17841400000000000" },
-          ]}
-          cred={cred}
-          onSave={(vals) => {
-            setCredentials(vals);
-            setCompany({ connected: { ...company.connected, instagram: !!vals.igAccessToken } });
-            setSheet(null);
-            showToast(vals.igAccessToken ? "Instagramを連携しました" : "保存しました");
-          }}
-          oauthLabel="Instagramでログインして連携（審査後に有効化）"
-        />
+        <InstagramConnect />
       </BottomSheet>
 
       <BottomSheet open={sheet === "gbp"} onClose={() => setSheet(null)} title="GBP 連携">
@@ -454,6 +440,163 @@ function IntegrationCard({
   );
 }
 
+function InstagramConnect() {
+  const { company, setCredentials, setCompany, showToast } = useApp();
+  const cred = company.credentials ?? {};
+  const [appId, setAppId] = useState(cred.igAppId ?? "");
+  const [appSecret, setAppSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [oauth, setOauth] = useState<{ connected: boolean; account?: string | null; page?: string | null }>(
+    { connected: false }
+  );
+
+  // Reflect the result of a returning OAuth redirect + current cookie status.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("ig") === "connected") {
+      showToast("Instagramアカウントを連携しました🎉");
+      setCompany({ connected: { ...company.connected, instagram: true } });
+    } else if (params.get("ig") === "error") {
+      showToast("連携に失敗しました（" + (params.get("reason") ?? "") + "）");
+    }
+    fetch("/api/integrations/instagram/status")
+      .then((r) => r.json())
+      .then((s) =>
+        setOauth({ connected: !!s.connected, account: s.account?.username, page: s.page })
+      )
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function verify() {
+    if (!appId.trim() || !appSecret.trim()) {
+      setResult({ ok: false, msg: "App ID と App Secret を入力してください。" });
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/integrations/instagram/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ appId: appId.trim(), appSecret: appSecret.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // Persist only the public App ID + a verified flag. Never the secret.
+        setCredentials({ igAppId: appId.trim(), igAppVerified: true });
+        setResult({ ok: true, msg: data.message });
+        showToast("アプリ認証に成功しました");
+        setAppSecret("");
+      } else {
+        setResult({ ok: false, msg: data.error ?? "認証に失敗しました。" });
+      }
+    } catch {
+      setResult({ ok: false, msg: "通信に失敗しました。" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--brand-2)]" />
+        <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
+          Meta（Instagram Graph API）アプリの認証情報を入力します。App Secret は
+          サーバー側でのみ使用し、ブラウザには保存しません。
+        </p>
+      </div>
+
+      {/* Step 1: app credential verification */}
+      <div>
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">
+          ステップ1: アプリ認証（キーの有効性を確認）
+        </p>
+        <div className="space-y-2.5">
+          <div className="glass px-4 py-3">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">App ID</p>
+            <input
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              placeholder="例: 1317853280469762"
+              autoComplete="off"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
+            />
+          </div>
+          <div className="glass px-4 py-3">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">App Secret</p>
+            <input
+              type="password"
+              value={appSecret}
+              onChange={(e) => setAppSecret(e.target.value)}
+              placeholder="32桁のシークレット"
+              autoComplete="off"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
+            />
+          </div>
+        </div>
+
+        {result && (
+          <div
+            className={`mt-2.5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[12px] ${
+              result.ok
+                ? "border border-[var(--ok)]/30 bg-[var(--ok)]/10 text-[var(--ok)]"
+                : "border border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)]"
+            }`}
+          >
+            {result.ok ? <Check size={14} className="mt-0.5" /> : null}
+            <span>{result.msg}</span>
+          </div>
+        )}
+
+        <Button onClick={verify} className="mt-3 w-full" disabled={busy}>
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+          {busy ? "認証中…" : "アプリを認証して連携"}
+        </Button>
+      </div>
+
+      {/* Step 2: account OAuth (user action) */}
+      <div className="border-t border-white/8 pt-4">
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">
+          ステップ2: 投稿アカウントを連携（本人ログイン）
+        </p>
+        {oauth.connected ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
+            <Check size={16} />
+            <span>
+              連携済み{oauth.account ? `: @${oauth.account}` : ""}
+              {oauth.page ? `（${oauth.page}）` : ""}
+            </span>
+          </div>
+        ) : (
+          <a href="/api/auth/instagram/login" className="block">
+            <Button className="w-full" variant="soft">
+              <LogIn size={16} /> Facebookログインで投稿連携
+            </Button>
+          </a>
+        )}
+        <p className="mt-2 text-[10px] leading-relaxed text-[var(--fg-faint)]">
+          対象は「プロアカウント（ビジネス/クリエイター）」＋Facebookページ連携が前提です。
+          Metaアプリの「有効なOAuthリダイレクトURI」に
+          <code className="mx-1 text-[var(--brand-2)]">/api/auth/instagram/callback</code>
+          の登録が必要です。
+        </p>
+      </div>
+
+      <a
+        href="https://developers.facebook.com/apps/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-2)]"
+      >
+        <ExternalLink size={13} /> Meta for Developers を開く
+      </a>
+    </div>
+  );
+}
+
 function ConnectForm({
   intro,
   fields,
@@ -472,9 +615,9 @@ function ConnectForm({
   oauthLabel?: string;
 }) {
   const [vals, setVals] = useState<Partial<Credentials>>(() => {
-    const init: Partial<Credentials> = {};
+    const init: Record<string, unknown> = {};
     fields.forEach((f) => (init[f.key] = cred[f.key]));
-    return init;
+    return init as Partial<Credentials>;
   });
 
   return (
