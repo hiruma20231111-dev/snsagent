@@ -1,26 +1,175 @@
 @import "tailwindcss";
 
+/* ============================================================
+   SNS Agent — Design System
+   「写真は撮るだけ。あとはAIがブランドを創り上げる。」
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces — deep aurora theme */
+  --bg: #0b0a14;
+  --bg-soft: #13111f;
+  --card: rgba(255, 255, 255, 0.045);
+  --card-strong: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* Text */
+  --fg: #f4f2ff;
+  --fg-dim: #b4afce;
+  --fg-faint: #837ea0;
+
+  /* Brand — Instagram aurora */
+  --brand-1: #ff7a45; /* sunset orange */
+  --brand-2: #ff2e74; /* magenta */
+  --brand-3: #b026ff; /* violet */
+  --brand-4: #5b6dff; /* indigo */
+
+  --accent: #ff2e74;
+  --ok: #2ee6a6;
+  --warn: #ffbe3d;
+  --danger: #ff4d6d;
+
+  --grad-brand: linear-gradient(120deg, #ff7a45 0%, #ff2e74 38%, #b026ff 72%, #5b6dff 100%);
+  --grad-brand-soft: linear-gradient(120deg, rgba(255, 122, 69, 0.18), rgba(176, 38, 255, 0.18));
+
+  --shadow-glow: 0 18px 50px -18px rgba(176, 38, 255, 0.55);
+  --radius: 22px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-fg: var(--fg);
+  --color-fg-dim: var(--fg-dim);
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Aurora backdrop behind the whole app */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-bg::before,
+.aurora-bg::after {
+  content: "";
+  position: absolute;
+  width: 65vmax;
+  height: 65vmax;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  animation: drift 22s ease-in-out infinite;
+}
+.aurora-bg::before {
+  top: -25%;
+  left: -15%;
+  background: radial-gradient(circle, #b026ff 0%, transparent 60%);
+}
+.aurora-bg::after {
+  bottom: -30%;
+  right: -20%;
+  background: radial-gradient(circle, #ff2e74 0%, transparent 60%);
+  animation-delay: -8s;
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, 8%) scale(1.15); }
+}
+
+/* Phone shell on desktop, edge-to-edge on mobile */
+.app-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: linear-gradient(180deg, rgba(19, 17, 31, 0.7), rgba(11, 10, 20, 0.92));
+  backdrop-filter: blur(8px);
+}
+@media (min-width: 540px) {
+  .app-shell {
+    min-height: calc(100dvh - 32px);
+    margin-top: 16px;
+    margin-bottom: 16px;
+    border-radius: 34px;
+    border: 1px solid var(--border);
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+  }
+}
+
+/* Glass card */
+.glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+}
+.glass-strong {
+  background: var(--card-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  backdrop-filter: blur(18px);
+}
+
+.text-gradient {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-gradient {
+  background: var(--grad-brand);
+}
+
+/* Pretty scrollbars hidden on mobile */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Shimmer for AI loading */
+.shimmer {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.04) 30%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.04) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+input, textarea, select, button {
+  font: inherit;
+  color: inherit;
 }

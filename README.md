@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lumina — Instagram & GBP 自動運用 SaaS
 
-## Getting Started
+> 「写真は撮るだけ。あとはAIがブランドを創り上げる。」
 
-First, run the development server:
+実店舗のSNS運用の壁（時間・ノウハウ）を壊す、AI SNSオートパイロット。
+Instagramを一度も開かずに、**写真1枚から投稿の生成・予約・接客まで**すべてが本アプリ上で完結します。
+
+🔗 **本番デモ**: （Vercelデプロイ後にURLを記載）
+
+---
+
+## 体験できること（デモ）
+
+デモテナント「ぱどカフェ 梅田店」のデータで全機能を操作できます。
+
+| 画面 | 内容 |
+|------|------|
+| **ホーム** | フォロワー推移・エンゲージ率・伸びる時間帯など多角的な分析ダッシュボード |
+| **投稿をつくる** | 写真1枚 → AIが解析 → キャプション＆バナー文字を自動生成 → プレビューで微調整 → 投稿先（IG/GBP）と形式を選んで予約 |
+| **予約カレンダー** | 日付タップ → 時間ポチポチ設定／IG・GBP同時／繰り返し（毎週・毎月）／定休日スキップ。**臨時休業ワンクリックマクロ**で全予約停止＋緊急バナー自動投稿 |
+| **受信ボックス** | DM・コメント・口コミを1画面に統合。キーワード自動応答＋AI返信案で接客を完結 |
+| **設定** | 連携・AIトーン・定休日・自動応答ルール・マザーボード連携APIを集約 |
+
+---
+
+## 設計（要件定義の思想を反映）
+
+- **AI Adapterパターン** (`src/lib/ai/adapter.ts`)
+  アプリはモデルに直接話さず `AIProvider` インターフェース経由。`GEMINI_API_KEY` を入れるだけで Gemini 1.5 Flash に切替（コードは無変更）。
+  コスト規律：AIは「指示出し（テキスト抽出）」のみ。画像生成そのものは行わず、バナー合成は外部API（Bannerbear等）に委譲。
+- **マザーボード連携API** (`/api/saas/stats`)
+  運営の管理アプリが全テナントの利用統計を取得する内部エンドポイント。`x-internal-key` ヘッダで保護。
+- **マルチテナント構造**
+  全データモデルが `companyId` を保持し、テナント単位のデータ隔離を前提に設計（`src/lib/types.ts`）。
+- **モバイルファースト**
+  ボトムナビ、ボトムシート（ドラッグで閉じる）、ポチポチ時間ピッカー。Framer Motion でリッチなアニメーション。
+
+## 技術スタック
+
+Next.js 16 (App Router) ／ TypeScript ／ Tailwind CSS v4 ／ Framer Motion ／ Recharts ／ lucide-react
+
+## 開発
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # 本番ビルド
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+環境変数は `.env.example` を参照（すべて任意・未設定でもモックで動作）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ロードマップ（要件定義の4フェーズ）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Phase 1** 基盤・設定管理 … ✅ UI／状態管理／設定画面
+- **Phase 2** AIオーケストレーター・画像生成 … ✅ Adapter基盤・画像解析・バナー合成API（モック）／⬜ 実APIキー接続
+- **Phase 3** カレンダー・スケジューラー … ✅ 予約UI・リピート・プレビュー微調整
+- **Phase 4** 業務マクロ・SaaS拡張 … ✅ 休業日スキップ・臨時休業マクロ・マザーボードAPI／⬜ 本番DB(PostgreSQL)・キュー(Redis)・実OAuth
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> 本リポジトリは UX とアーキテクチャを実証する MVP です。本番運用には Instagram Graph API / GBP API / Bannerbear / Gemini のキー、PostgreSQL、Redis の接続が必要です。

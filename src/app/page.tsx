@@ -1,65 +1,92 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { Camera, Sparkles, CalendarCheck, MessageCircleHeart } from "lucide-react";
+
+const features = [
+  { icon: Camera, text: "写真1枚アップするだけ" },
+  { icon: Sparkles, text: "AIがキャプション＆バナーを自動生成" },
+  { icon: CalendarCheck, text: "Instagram & GBP に同時予約投稿" },
+  { icon: MessageCircleHeart, text: "DM・口コミも自動で接客" },
+];
+
+export default function Landing() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="app-shell flex flex-col items-center px-6 pb-10 pt-16 text-center">
+      <motion.div
+        initial={{ scale: 0.6, opacity: 0, rotate: -12 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 16 }}
+        className="flex h-20 w-20 items-center justify-center rounded-3xl text-white shadow-[var(--shadow-glow)]"
+        style={{ background: "var(--grad-brand)" }}
+      >
+        <span className="text-4xl font-black">L</span>
+      </motion.div>
+
+      <motion.h1
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="mt-7 text-4xl font-black leading-tight tracking-tight"
+      >
+        写真は撮るだけ。
+        <br />
+        あとは<span className="text-gradient">AI</span>が
+        <br />
+        ブランドを創る。
+      </motion.h1>
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--fg-dim)]"
+      >
+        実店舗のためのAI SNSオートパイロット。
+        Instagramを一度も開かずに、運用のすべてがここで完結します。
+      </motion.p>
+
+      <div className="mt-9 w-full space-y-2.5">
+        {features.map(({ icon: Icon, text }, i) => (
+          <motion.div
+            key={text}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 + i * 0.1 }}
+            className="glass flex items-center gap-3 px-4 py-3 text-left"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+              style={{ background: "var(--grad-brand-soft)" }}
+            >
+              <Icon size={18} className="text-white" />
+            </span>
+            <span className="text-sm font-medium">{text}</span>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.9 }}
+        className="mt-10 w-full"
+      >
+        <Link href="/dashboard">
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            whileHover={{ scale: 1.02 }}
+            className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-[var(--shadow-glow)]"
+            style={{ background: "var(--grad-brand)" }}
           >
-            Documentation
-          </a>
-        </div>
-      </main>
+            無料ではじめる →
+          </motion.button>
+        </Link>
+        <p className="mt-3 text-[11px] text-[var(--fg-faint)]">
+          デモ環境：ぱどカフェ 梅田店のデータで体験できます
+        </p>
+      </motion.div>
     </div>
   );
 }
