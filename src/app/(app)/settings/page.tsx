@@ -54,7 +54,7 @@ export default function SettingsPage() {
   }
 
   const igConnected = company.connected.instagram || !!cred.igAccessToken;
-  const gbpConnected = !!cred.gbpAccessToken;
+  const gbpConnected = company.connected.gbp;
 
   return (
     <Page>
@@ -291,23 +291,7 @@ export default function SettingsPage() {
       </BottomSheet>
 
       <BottomSheet open={sheet === "gbp"} onClose={() => setSheet(null)} title="GBP 連携">
-        <ConnectForm
-          intro="Googleビジネスプロフィールの最新情報を自動投稿します。Google Cloud で Business Profile API を有効化し、OAuthで取得したトークンを入力します。"
-          docLabel="Google Cloud Console を開く"
-          docUrl="https://console.cloud.google.com/"
-          fields={[
-            { key: "gbpAccessToken", label: "アクセストークン", placeholder: "ya29... から始まるトークン", secret: true },
-            { key: "gbpLocationId", label: "ロケーションID", placeholder: "locations/0000000000000000000" },
-          ]}
-          cred={cred}
-          onSave={(vals) => {
-            setCredentials(vals);
-            setCompany({ connected: { ...company.connected, gbp: !!vals.gbpAccessToken } });
-            setSheet(null);
-            showToast(vals.gbpAccessToken ? "GBPを連携しました" : "保存しました");
-          }}
-          oauthLabel="Googleで連携（API承認後に有効化）"
-        />
+        <GbpConnect />
       </BottomSheet>
 
       <BottomSheet open={sheet === "gemini"} onClose={() => setSheet(null)} title="AI（Gemini）設定">
@@ -549,6 +533,244 @@ function InstagramConnect() {
         className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-2)]"
       >
         <ExternalLink size={13} /> Meta for Developers を開く
+      </a>
+    </div>
+  );
+}
+
+function GbpConnect() {
+  const { company, setCompany, setCredentials, showToast } = useApp();
+  const cred = company.credentials ?? {};
+  const [cfg, setCfg] = useState<{ configured: boolean; clientIdTail: string | null } | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const [locs, setLocs] = useState<{ id: string; title: string; address: string }[]>([]);
+  const [locState, setLocState] = useState<
+    "idle" | "loading" | "loaded" | "empty" | "needsApproval" | "error"
+  >("idle");
+  const [locError, setLocError] = useState<string | null>(null);
+  const [manualId, setManualId] = useState(cred.gbpLocationId ?? "");
+  const selected = cred.gbpLocationId;
+
+  useEffect(() => {
+    setCallbackUrl(`${window.location.origin}/api/auth/google/callback`);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gbp") === "connected") {
+      showToast("Googleビジネスプロフィールを連携しました🎉");
+      setCompany({ connected: { ...company.connected, gbp: true } });
+      setConnected(true);
+      window.history.replaceState({}, "", "/settings");
+    } else if (params.get("gbp") === "error") {
+      showToast("連携に失敗しました（" + (params.get("reason") ?? "") + "）");
+      window.history.replaceState({}, "", "/settings");
+    }
+    fetch("/api/integrations/gbp/config")
+      .then((r) => r.json())
+      .then(setCfg)
+      .catch(() => {});
+    fetch("/api/integrations/gbp/status")
+      .then((r) => r.json())
+      .then((s) => setConnected(!!s.connected))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadLocations() {
+    setLocState("loading");
+    setLocError(null);
+    try {
+      const d = await fetch("/api/gbp/locations").then((r) => r.json());
+      if (d.ok) {
+        setLocs(d.locations ?? []);
+        setLocState((d.locations ?? []).length ? "loaded" : "empty");
+      } else if (d.needsApproval) {
+        setLocState("needsApproval");
+        setLocError(d.error ?? null);
+      } else {
+        setLocState("error");
+        setLocError(d.error ?? "取得に失敗しました");
+      }
+    } catch (e) {
+      setLocState("error");
+      setLocError(String(e));
+    }
+  }
+
+  function pick(id: string) {
+    setManualId(id);
+    setCredentials({ gbpLocationId: id });
+    showToast("投稿先の店舗を設定しました");
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--brand-2)]" />
+        <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
+          Googleアカウントで連携します（権限: business.manage）。ボタン1つでOAuth認証し、
+          トークンはサーバーの暗号化Cookieに安全に保管されます。
+        </p>
+      </div>
+
+      {/* Step 1: server credentials */}
+      <div>
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">ステップ1: 認証情報</p>
+        {cfg?.configured ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
+            <Check size={16} />
+            <span>設定済み（Client ID …{cfg.clientIdTail}）</span>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[var(--warn)]/30 bg-[var(--warn)]/10 px-4 py-3 text-[12px] text-[var(--fg-dim)]">
+            サーバーに認証情報が未設定です。環境変数 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定してください。
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: OAuth */}
+      <div className="border-t border-white/8 pt-4">
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">ステップ2: Googleで連携</p>
+        {connected ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-2xl border border-[var(--ok)]/30 bg-[var(--ok)]/10 px-4 py-3 text-sm text-[var(--ok)]">
+              <Check size={16} />
+              <span>連携済み</span>
+            </div>
+            <a
+              href="/api/auth/google/login"
+              className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/12 bg-white/5 py-2.5 text-[12px] font-semibold text-[var(--fg-dim)]"
+            >
+              <RotateCcw size={13} /> 再連携（権限の更新時など）
+            </a>
+          </div>
+        ) : (
+          <a href="/api/auth/google/login" className="block">
+            <Button className="w-full">
+              <LogIn size={16} /> Googleで連携
+            </Button>
+          </a>
+        )}
+      </div>
+
+      {/* Step 3: location selection (only meaningful once connected) */}
+      {connected && (
+        <div className="border-t border-white/8 pt-4">
+          <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">ステップ3: 投稿先の店舗</p>
+
+          {selected && (
+            <div className="mb-2 flex items-center gap-2 rounded-2xl border border-[var(--brand-3)]/30 bg-[var(--brand-3)]/10 px-3 py-2 text-[12px] text-[var(--fg-dim)]">
+              <MapPin size={14} className="shrink-0 text-[var(--brand-2)]" />
+              <span className="truncate font-mono">{selected}</span>
+            </div>
+          )}
+
+          <button
+            onClick={loadLocations}
+            disabled={locState === "loading"}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/5 py-2.5 text-[12px] font-semibold text-[var(--fg-dim)] disabled:opacity-50"
+          >
+            <RotateCcw size={13} />
+            {locState === "loading" ? "取得中…" : "店舗一覧を取得"}
+          </button>
+
+          {locState === "loaded" && (
+            <div className="mt-2 space-y-1.5">
+              {locs.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => pick(l.id)}
+                  className={`flex w-full flex-col items-start rounded-2xl border px-3 py-2 text-left ${
+                    selected === l.id
+                      ? "border-[var(--ok)]/40 bg-[var(--ok)]/10"
+                      : "border-white/10 bg-white/5"
+                  }`}
+                >
+                  <span className="text-[13px] font-bold">{l.title}</span>
+                  {l.address && (
+                    <span className="text-[10px] text-[var(--fg-faint)]">{l.address}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {locState === "empty" && (
+            <p className="mt-2 text-[11px] text-[var(--fg-faint)]">
+              このアカウントに店舗が見つかりませんでした。
+            </p>
+          )}
+
+          {(locState === "needsApproval" || locState === "error") && (
+            <div className="mt-2 rounded-2xl border border-[var(--warn)]/30 bg-[var(--warn)]/10 p-3">
+              <p className="text-[12px] font-bold text-[var(--warn)]">
+                {locState === "needsApproval"
+                  ? "Business Profile API の利用申請が必要です"
+                  : "店舗一覧を取得できませんでした"}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--fg-dim)]">
+                {locState === "needsApproval"
+                  ? "連携は完了していますが、店舗一覧・自動投稿はGoogleの承認後に有効化されます。承認までは下に店舗の「ロケーションID」を直接入力してください。"
+                  : "時間をおくか、下にロケーションIDを直接入力してください。"}
+              </p>
+              {locError && (
+                <p className="mt-2 break-words rounded-lg bg-black/30 px-2.5 py-1.5 font-mono text-[10px] text-[var(--fg-faint)]">
+                  詳細: {locError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Manual fallback */}
+          <div className="mt-3 glass px-4 py-3">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">
+              手動でロケーションIDを指定
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                value={manualId}
+                onChange={(e) => setManualId(e.target.value)}
+                placeholder="locations/0000000000000000000"
+                autoComplete="off"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
+              />
+              <button
+                onClick={() => manualId.trim() && pick(manualId.trim())}
+                className="shrink-0 rounded-xl bg-white/8 px-3 py-1.5 text-[11px] font-semibold"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google Cloud OAuth client setup helper */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <p className="mb-1.5 text-[11px] font-bold">Google Cloud 側で必要な設定</p>
+        <p className="text-[10px] leading-relaxed text-[var(--fg-faint)]">
+          OAuthクライアント（種類: ウェブアプリケーション）を作成し、「承認済みのリダイレクトURI」に下記を登録してください。
+        </p>
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2 font-mono text-[10px]">
+          <span className="flex-1 truncate text-[var(--fg-dim)]">{callbackUrl}</span>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(callbackUrl);
+              showToast("リダイレクトURIをコピーしました");
+            }}
+            className="rounded-md bg-white/8 p-1.5"
+          >
+            <Copy size={12} />
+          </button>
+        </div>
+      </div>
+
+      <a
+        href="https://console.cloud.google.com/apis/credentials"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-2)]"
+      >
+        <ExternalLink size={13} /> Google Cloud Console を開く
       </a>
     </div>
   );
