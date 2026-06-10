@@ -129,10 +129,10 @@ export default function CreatePage() {
       const pub = await fetch("/api/publish/instagram", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ imageUrl: up.url, caption: fullCaption }),
+        body: JSON.stringify({ imageUrl: up.url, caption: fullCaption, format }),
       }).then((r) => r.json());
       if (pub.ok) {
-        showToast("Instagramに投稿しました🎉");
+        showToast(pub.isStory ? "ストーリーズに投稿しました🎉" : "Instagramに投稿しました🎉");
         router.push("/dashboard");
       } else {
         showToast("投稿に失敗: " + (pub.error ?? ""));

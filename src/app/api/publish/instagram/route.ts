@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { imageUrl?: string; caption?: string } = {};
+  let body: { imageUrl?: string; caption?: string; format?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -71,6 +71,9 @@ export async function POST(req: Request) {
   if (!body.imageUrl) {
     return NextResponse.json({ ok: false, error: "画像URLがありません。" }, { status: 400 });
   }
+  // "story" -> Stories; anything else -> a normal feed image post.
+  // (Reels need a video_url, so a still image is published as a feed post.)
+  const isStory = body.format === "story";
 
   try {
     // Resolve the IG user id from the token.
@@ -86,12 +89,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) create media container
+    // 1) create media container.
+    // Stories ignore captions; feed posts carry the caption + hashtags.
     const createParams = new URLSearchParams({
       image_url: body.imageUrl,
-      caption: body.caption ?? "",
       access_token: token,
     });
+    if (isStory) {
+      createParams.set("media_type", "STORIES");
+    } else {
+      createParams.set("caption", body.caption ?? "");
+    }
     const createRes = await fetch(`${GRAPH}/${igId}/media`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -139,7 +147,7 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true, mediaId: published.id });
+    return NextResponse.json({ ok: true, mediaId: published.id, isStory });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: "Instagram投稿に失敗しました: " + String(e) },
