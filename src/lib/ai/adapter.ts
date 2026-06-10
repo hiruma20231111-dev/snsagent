@@ -11,11 +11,20 @@
 
 import type { AIAnalysis, AIToneId } from "@/lib/types";
 
+export interface BusinessProfile {
+  name?: string | null;
+  username?: string | null;
+  biography?: string | null;
+  website?: string | null;
+}
+
 export interface AnalyzeInput {
   /** Filename / inferred subject of the uploaded photo. */
   hint?: string;
   tone: AIToneId;
   brandName: string;
+  /** Real Instagram profile, used to ground copy in the actual business. */
+  profile?: BusinessProfile;
 }
 
 export interface AIProvider {
@@ -112,11 +121,24 @@ export class GeminiFlashAdapter implements AIProvider {
       calm: "おだやかで落ち着いた",
       luxury: "上質で高級感のある",
     };
+    const p = input.profile;
+    const profileBlock = p
+      ? `\n\n【店舗プロフィール（Instagram実データ）】\n` +
+        (p.name ? `・店名: ${p.name}\n` : "") +
+        (p.username ? `・アカウント: @${p.username}\n` : "") +
+        (p.biography ? `・自己紹介(bio): ${p.biography}\n` : "") +
+        (p.website ? `・サイト: ${p.website}\n` : "") +
+        `このプロフィールから「地域・エリア名」「業態・ジャンル」「お店の雰囲気」を読み取り、` +
+        `キャプションとハッシュタグに必ず反映してください。` +
+        `ハッシュタグには地域名タグ（例: #〇〇グルメ #〇〇駅）と業態タグを含めること。`
+      : "";
+
     const prompt =
-      `あなたは実店舗「${input.brandName}」のSNS運用担当です。` +
+      `あなたは実店舗「${p?.name || input.brandName}」のSNS運用担当です。` +
       `アップされた写真を見て、${toneJa[input.tone]}トーンで、` +
       `Instagram投稿用の素材を日本語で作ってください。` +
-      `次のJSONだけを返してください（前後に説明文やコードブロックは不要）:\n` +
+      profileBlock +
+      `\n\n次のJSONだけを返してください（前後に説明文やコードブロックは不要）:\n` +
       `{"title":"バナー用の短い見出し(全角12字以内)","subtitle":"サブ見出し(全角20字以内)",` +
       `"caption":"本文キャプション(絵文字込み・3〜5文)","hashtags":["#〜","#〜","#〜","#〜","#〜"],"emoji":"絵文字1つ"}`;
 

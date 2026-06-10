@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAIProvider } from "@/lib/ai/adapter";
+import { getAIProvider, type BusinessProfile } from "@/lib/ai/adapter";
 import type { AIToneId } from "@/lib/types";
 
 // POST /api/ai/analyze
-// Body: { hint?, tone?, brandName?, imageBase64?, mimeType?, apiKey? }
+// Body: { hint?, tone?, brandName?, imageBase64?, mimeType?, apiKey?, profile? }
 // The adapter factory picks Gemini when a key is available (per-tenant
 // key in the body, or the server's GEMINI_API_KEY), else the local mock.
 export async function POST(req: Request) {
@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     imageBase64?: string;
     mimeType?: string;
     apiKey?: string;
+    profile?: BusinessProfile;
   } = {};
   try {
     body = await req.json();
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
     hint: body.hint,
     tone: body.tone ?? "friendly",
     brandName: body.brandName ?? "お店",
+    profile: body.profile,
   });
 
   return NextResponse.json({ ok: true, provider: provider.id, result });

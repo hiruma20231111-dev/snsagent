@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -40,6 +40,16 @@ export default function CreatePage() {
   const [format, setFormat] = useState<PostFormat>("feed");
   const [publishing, setPublishing] = useState(false);
 
+  // Real Instagram profile (name / bio / area) to ground AI copy.
+  type Profile = { name?: string | null; username?: string | null; biography?: string | null; website?: string | null };
+  const [profile, setProfile] = useState<Profile | null>(null);
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((d) => setProfile(d.profile ?? null))
+      .catch(() => setProfile(null));
+  }, []);
+
   function onPick(file: File) {
     setFilename(file.name);
     const reader = new FileReader();
@@ -62,10 +72,11 @@ export default function CreatePage() {
         body: JSON.stringify({
           hint,
           tone: company.aiTone,
-          brandName: company.name,
+          brandName: profile?.name || company.name,
           imageBase64: b64,
           mimeType,
           apiKey: company.credentials?.geminiKey,
+          profile: profile ?? undefined,
         }),
       });
       const data = await res.json();
