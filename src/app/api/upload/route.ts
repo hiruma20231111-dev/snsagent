@@ -7,7 +7,9 @@ import { put } from "@vercel/blob";
 // image URLs (not data URLs). Needs BLOB_READ_WRITE_TOKEN (auto-injected
 // once the Blob store is connected to the project).
 export async function POST(req: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  // Newer Vercel Blob injects BLOB_STORE_ID (+ OIDC auto-auth); older
+  // setups use a static BLOB_READ_WRITE_TOKEN. Accept either.
+  if (!process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json(
       {
         ok: false,
