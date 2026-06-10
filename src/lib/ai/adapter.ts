@@ -94,19 +94,79 @@ export class MockAdapter implements AIProvider {
 export class GeminiFlashAdapter implements AIProvider {
   readonly id = "gemini-1.5-flash";
   readonly label = "Gemini 1.5 Flash";
-  constructor(private apiKey: string) {}
+  constructor(
+    private apiKey: string,
+    private imageBase64?: string,
+    private mimeType = "image/jpeg"
+  ) {}
 
   async analyzePhoto(input: AnalyzeInput): Promise<AIAnalysis> {
-    // const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + this.apiKey, {...})
-    // Parse the JSON the model returns into AIAnalysis here.
-    // For safety in this build we fall back to the local adapter.
-    return new MockAdapter().analyzePhoto(input);
+    const toneJa: Record<AIToneId, string> = {
+      friendly: "フレンドリーで親しみやすい",
+      polite: "ていねいで上品な",
+      energetic: "元気でテンション高めの",
+      calm: "おだやかで落ち着いた",
+      luxury: "上質で高級感のある",
+    };
+    const prompt =
+      `あなたは実店舗「${input.brandName}」のSNS運用担当です。` +
+      `アップされた写真を見て、${toneJa[input.tone]}トーンで、` +
+      `Instagram投稿用の素材を日本語で作ってください。` +
+      `次のJSONだけを返してください（前後に説明文やコードブロックは不要）:\n` +
+      `{"title":"バナー用の短い見出し(全角12字以内)","subtitle":"サブ見出し(全角20字以内)",` +
+      `"caption":"本文キャプション(絵文字込み・3〜5文)","hashtags":["#〜","#〜","#〜","#〜","#〜"],"emoji":"絵文字1つ"}`;
+
+    const parts: Record<string, unknown>[] = [{ text: prompt }];
+    if (this.imageBase64) {
+      parts.push({ inline_data: { mime_type: this.mimeType, data: this.imageBase64 } });
+    }
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { temperature: 0.9, responseMimeType: "application/json" },
+          }),
+          cache: "no-store",
+        }
+      );
+      const data = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        error?: { message?: string };
+      };
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error(data.error?.message ?? "no content");
+
+      const parsed = JSON.parse(text) as Partial<AIAnalysis> & { hashtags?: string[] };
+      const grad =
+        "linear-gradient(135deg,#ff7a45,#ff2e74)"; // banner photo overlays this
+      return {
+        title: parsed.title ?? "今日のおすすめ",
+        subtitle: parsed.subtitle ?? "",
+        caption: parsed.caption ?? "",
+        hashtags: parsed.hashtags ?? [],
+        emoji: parsed.emoji ?? "✨",
+        banner: grad,
+        model: this.label,
+      };
+    } catch {
+      // Network/parse failure — degrade gracefully to the local copywriter.
+      return new MockAdapter().analyzePhoto(input);
+    }
   }
 }
 
 /** Factory — the single switch point for the whole app. */
-export function getAIProvider(): AIProvider {
-  const key = process.env.GEMINI_API_KEY;
-  if (key) return new GeminiFlashAdapter(key);
+export function getAIProvider(opts?: {
+  apiKey?: string;
+  imageBase64?: string;
+  mimeType?: string;
+}): AIProvider {
+  const key = opts?.apiKey || process.env.GEMINI_API_KEY;
+  if (key) return new GeminiFlashAdapter(key, opts?.imageBase64, opts?.mimeType);
   return new MockAdapter();
 }

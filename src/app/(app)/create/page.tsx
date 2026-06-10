@@ -38,24 +38,35 @@ export default function CreatePage() {
   const [banner, setBanner] = useState(BANNER_GRADIENTS[0]);
   const [channels, setChannels] = useState<Channel[]>(["instagram", "gbp"]);
   const [format, setFormat] = useState<PostFormat>("feed");
+  const [publishing, setPublishing] = useState(false);
 
   function onPick(file: File) {
     setFilename(file.name);
     const reader = new FileReader();
     reader.onload = () => {
-      setPhoto(reader.result as string);
-      runAI(file.name);
+      const dataUrl = reader.result as string;
+      setPhoto(dataUrl);
+      runAI(file.name, dataUrl);
     };
     reader.readAsDataURL(file);
   }
 
-  async function runAI(hint: string) {
+  async function runAI(hint: string, dataUrl: string) {
     setStep("analyzing");
+    const [meta, b64] = dataUrl.split(",");
+    const mimeType = /data:(.*?);/.exec(meta)?.[1] ?? "image/jpeg";
     try {
       const res = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ hint, tone: company.aiTone, brandName: company.name }),
+        body: JSON.stringify({
+          hint,
+          tone: company.aiTone,
+          brandName: company.name,
+          imageBase64: b64,
+          mimeType,
+          apiKey: company.credentials?.geminiKey,
+        }),
       });
       const data = await res.json();
       const r: AIAnalysis = data.result;
@@ -83,6 +94,43 @@ export default function CreatePage() {
     setStep("upload");
     setPhoto(null);
     setAi(null);
+  }
+
+  async function publishNow() {
+    if (!photo) return;
+    setPublishing(true);
+    try {
+      const st = await fetch("/api/integrations/instagram/status").then((r) => r.json());
+      if (!st.connected) {
+        showToast("先に設定からInstagram連携をしてください");
+        return;
+      }
+      const up = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl: photo }),
+      }).then((r) => r.json());
+      if (!up.ok) {
+        showToast(up.error ?? "画像アップロードに失敗しました");
+        return;
+      }
+      const fullCaption = `${caption}\n\n${hashtags.join(" ")}`.trim();
+      const pub = await fetch("/api/publish/instagram", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageUrl: up.url, caption: fullCaption }),
+      }).then((r) => r.json());
+      if (pub.ok) {
+        showToast("Instagramに投稿しました🎉");
+        router.push("/dashboard");
+      } else {
+        showToast("投稿に失敗: " + (pub.error ?? ""));
+      }
+    } catch {
+      showToast("投稿に失敗しました");
+    } finally {
+      setPublishing(false);
+    }
   }
 
   function schedule() {
@@ -378,6 +426,16 @@ export default function CreatePage() {
             <Button onClick={schedule} className="mt-6 w-full" disabled={channels.length === 0}>
               <Sparkles size={16} /> この内容で予約する
             </Button>
+            <button
+              onClick={publishNow}
+              disabled={publishing || !channels.includes("instagram")}
+              className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/5 py-3 text-sm font-semibold text-[var(--fg-dim)] disabled:opacity-40"
+            >
+              {publishing ? "投稿中…" : "今すぐInstagramに投稿"}
+            </button>
+            <p className="mt-2 text-center text-[10px] text-[var(--fg-faint)]">
+              ※ 実投稿はInstagram連携＆画像ストレージ接続後に有効
+            </p>
             </div>
             </div>
           </motion.div>
