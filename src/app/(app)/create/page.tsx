@@ -46,6 +46,9 @@ export default function CreatePage() {
   const [storyPos, setStoryPos] = useState<StoryTextPos>("bottom");
   const [storyImage, setStoryImage] = useState<string | null>(null);
   const [storyRendering, setStoryRendering] = useState(false);
+  const [storyShowCaption, setStoryShowCaption] = useState(false);
+  const [storyShowTags, setStoryShowTags] = useState(false);
+  const [storyColor, setStoryColor] = useState<string>("#ffffff");
 
   // Real Instagram profile (name / bio / area) to ground AI copy.
   type Profile = { name?: string | null; username?: string | null; biography?: string | null; website?: string | null };
@@ -65,7 +68,15 @@ export default function CreatePage() {
     let cancelled = false;
     setStoryRendering(true);
     const t = setTimeout(() => {
-      composeStoryImage({ photo, title, subtitle, position: storyPos })
+      composeStoryImage({
+        photo,
+        title,
+        subtitle,
+        caption: storyShowCaption ? caption : "",
+        hashtags: storyShowTags ? hashtags : [],
+        position: storyPos,
+        textColor: storyColor,
+      })
         .then((url) => {
           if (!cancelled) setStoryImage(url);
         })
@@ -78,7 +89,18 @@ export default function CreatePage() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [format, photo, title, subtitle, storyPos]);
+  }, [
+    format,
+    photo,
+    title,
+    subtitle,
+    caption,
+    hashtags,
+    storyPos,
+    storyShowCaption,
+    storyShowTags,
+    storyColor,
+  ]);
 
   function onPick(file: File) {
     setFilename(file.name);
@@ -152,7 +174,15 @@ export default function CreatePage() {
       if (format === "story") {
         imageToUpload =
           storyImage ??
-          (await composeStoryImage({ photo, title, subtitle, position: storyPos }));
+          (await composeStoryImage({
+            photo,
+            title,
+            subtitle,
+            caption: storyShowCaption ? caption : "",
+            hashtags: storyShowTags ? hashtags : [],
+            position: storyPos,
+            textColor: storyColor,
+          }));
       }
       const up = await fetch("/api/upload", {
         method: "POST",
@@ -392,7 +422,41 @@ export default function CreatePage() {
                     </Chip>
                   ))}
                 </div>
-                <p className="mt-2 text-center text-[10px] leading-relaxed text-[var(--fg-faint)]">
+
+                {/* What to burn in */}
+                <p className="mt-3 text-center text-[11px] font-semibold text-[var(--fg-faint)]">
+                  焼き込む内容
+                </p>
+                <div className="mt-1.5 flex flex-wrap justify-center gap-2">
+                  <Chip active onClick={() => {}}>見出し</Chip>
+                  <Chip active onClick={() => {}}>サブ</Chip>
+                  <Chip active={storyShowCaption} onClick={() => setStoryShowCaption((v) => !v)}>
+                    キャプション
+                  </Chip>
+                  <Chip active={storyShowTags} onClick={() => setStoryShowTags((v) => !v)}>
+                    ハッシュタグ
+                  </Chip>
+                </div>
+
+                {/* Text color */}
+                <p className="mt-3 text-center text-[11px] font-semibold text-[var(--fg-faint)]">
+                  文字色
+                </p>
+                <div className="mt-1.5 flex justify-center gap-2.5">
+                  {["#ffffff", "#111111", "#ff2e74", "#ffd24a", "#5b6dff"].map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setStoryColor(c)}
+                      aria-label={`文字色 ${c}`}
+                      className={`h-7 w-7 rounded-full border border-white/30 transition-transform ${
+                        storyColor === c ? "scale-110 ring-2 ring-white" : "opacity-80"
+                      }`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+
+                <p className="mt-3 text-center text-[10px] leading-relaxed text-[var(--fg-faint)]">
                   Instagramの仕様上、ストーリーズには文字を直接載せられないため、
                   <br className="hidden lg:block" />
                   見出し・サブ見出しを画像に焼き込みます（上下はUI領域を避けて配置）。

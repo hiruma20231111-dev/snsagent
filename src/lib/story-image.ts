@@ -19,8 +19,14 @@ export interface ComposeStoryOpts {
   photo: string;
   title?: string;
   subtitle?: string;
-  /** Vertical placement of the text block within the safe area. */
+  /** Long-form caption (optional — burned below the headline). */
+  caption?: string;
+  /** Hashtags (optional — burned as a single wrapped line group). */
+  hashtags?: string[];
+  /** Vertical placement of the whole text block within the safe area. */
   position?: StoryTextPos;
+  /** Text color (hex). The legibility panel/shadow adapt for contrast. */
+  textColor?: string;
 }
 
 // Instagram Story canvas + the UI-reserved "safe zones" (top profile row /
@@ -31,6 +37,7 @@ const SAFE_TOP = 250;
 const SAFE_BOTTOM = 250;
 const PAD = 90; // horizontal text inset
 const PANEL_PAD = 34; // padding of the legibility panel around the text
+const SEG_GAP = 20; // vertical gap between title / subtitle / caption / tags
 const FONT_FAMILY =
   '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
 
@@ -120,6 +127,27 @@ function layoutText(
   return { size, lines };
 }
 
+interface Segment {
+  lines: string[];
+  size: number;
+  weight: number;
+  lh: number; // line height
+}
+
+function makeSegment(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  weight: number,
+  maxWidth: number,
+  startSize: number,
+  minSize: number,
+  maxLines: number,
+  lhFactor: number
+): Segment {
+  const { size, lines } = layoutText(ctx, text, weight, maxWidth, startSize, minSize, maxLines);
+  return { lines, size, weight, lh: size * lhFactor };
+}
+
 function roundRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -142,12 +170,30 @@ function roundRectPath(
   ctx.closePath();
 }
 
+/** Relative luminance (0=black .. 1=white) of a #rrggbb / #rgb color. */
+function luminance(hex: string): number {
+  let h = hex.replace("#", "").trim();
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const r = parseInt(h.slice(0, 2), 16) || 0;
+  const g = parseInt(h.slice(2, 4), 16) || 0;
+  const b = parseInt(h.slice(4, 6), 16) || 0;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
 /**
  * Compose a 1080x1920 Instagram Story image with the photo and burned-in
  * text. Returns a JPEG data URL ready to hand to /api/upload.
  */
 export async function composeStoryImage(opts: ComposeStoryOpts): Promise<string> {
-  const { photo, title = "", subtitle = "", position = "bottom" } = opts;
+  const {
+    photo,
+    title = "",
+    subtitle = "",
+    caption = "",
+    hashtags = [],
+    position = "bottom",
+    textColor = "#ffffff",
+  } = opts;
   const img = await loadImage(photo);
 
   const canvas = document.createElement("canvas");
@@ -166,73 +212,62 @@ export async function composeStoryImage(opts: ComposeStoryOpts): Promise<string>
   // 2) Foreground: the full photo, contained so nothing important is cropped.
   drawContain(ctx, img, W, H);
 
-  // 3) Text block (burned in). Skip entirely if there's nothing to show.
-  const hasTitle = title.trim() !== "";
-  const hasSub = subtitle.trim() !== "";
-  if (hasTitle || hasSub) {
-    const maxTextW = W - PAD * 2;
+  // 3) Text block (burned in). Each part is optional.
+  const maxTextW = W - PAD * 2;
+  const tagsText = hashtags.filter(Boolean).join(" ").trim();
+  const segs: Segment[] = [];
+  if (title.trim()) segs.push(makeSegment(ctx, title.trim(), 800, maxTextW, 78, 46, 4, 1.2));
+  if (subtitle.trim()) segs.push(makeSegment(ctx, subtitle.trim(), 600, maxTextW, 44, 30, 3, 1.28));
+  if (caption.trim()) segs.push(makeSegment(ctx, caption.trim(), 500, maxTextW, 34, 24, 6, 1.34));
+  if (tagsText) segs.push(makeSegment(ctx, tagsText, 600, maxTextW, 30, 22, 3, 1.3));
 
-    const titleLayout = hasTitle
-      ? layoutText(ctx, title.trim(), 800, maxTextW, 78, 46, 4)
-      : { size: 0, lines: [] as string[] };
-    const subLayout = hasSub
-      ? layoutText(ctx, subtitle.trim(), 600, maxTextW, 44, 30, 3)
-      : { size: 0, lines: [] as string[] };
+  if (segs.length) {
+    const blockH =
+      segs.reduce((sum, s) => sum + s.lines.length * s.lh, 0) + SEG_GAP * (segs.length - 1);
 
-    const titleLH = titleLayout.size * 1.2;
-    const subLH = subLayout.size * 1.28;
-    const gap = hasTitle && hasSub ? 22 : 0;
-    const titleH = titleLayout.lines.length * titleLH;
-    const subH = subLayout.lines.length * subLH;
-    const blockH = titleH + (hasSub ? gap + subH : 0);
-
-    // widest line → panel width
+    // widest line across all segments → panel width
     let maxLineW = 0;
-    ctx.font = `800 ${titleLayout.size}px ${FONT_FAMILY}`;
-    for (const l of titleLayout.lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
-    ctx.font = `600 ${subLayout.size}px ${FONT_FAMILY}`;
-    for (const l of subLayout.lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
+    for (const s of segs) {
+      ctx.font = `${s.weight} ${s.size}px ${FONT_FAMILY}`;
+      for (const l of s.lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
+    }
 
-    const usableTop = SAFE_TOP;
-    const usableBottom = H - SAFE_BOTTOM;
     let blockTop: number;
-    if (position === "top") blockTop = usableTop + 24;
+    if (position === "top") blockTop = SAFE_TOP + 24;
     else if (position === "center") blockTop = (H - blockH) / 2;
-    else blockTop = usableBottom - blockH - 8;
+    else blockTop = H - SAFE_BOTTOM - blockH - 8;
+    // keep inside the safe area even if the block is tall
+    blockTop = Math.max(SAFE_TOP + 24, Math.min(blockTop, H - SAFE_BOTTOM - blockH - 8));
 
-    // legibility panel behind the text
+    // legibility panel — dark behind light text, light behind dark text
+    const lightText = luminance(textColor) > 0.55;
     const panelW = Math.min(maxLineW + PANEL_PAD * 2, W - 56);
     const panelX = (W - panelW) / 2;
     const panelY = blockTop - PANEL_PAD;
     const panelH = blockH + PANEL_PAD * 2;
-    ctx.fillStyle = "rgba(0,0,0,0.34)";
+    ctx.fillStyle = lightText ? "rgba(0,0,0,0.36)" : "rgba(255,255,255,0.46)";
     roundRectPath(ctx, panelX, panelY, panelW, panelH, 30);
     ctx.fill();
 
     // text
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.fillStyle = textColor;
+    ctx.shadowColor = lightText ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.18)";
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 2;
 
     let y = blockTop;
-    if (hasTitle) {
-      ctx.font = `800 ${titleLayout.size}px ${FONT_FAMILY}`;
-      for (const line of titleLayout.lines) {
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      ctx.font = `${s.weight} ${s.size}px ${FONT_FAMILY}`;
+      for (const line of s.lines) {
         ctx.fillText(line, W / 2, y);
-        y += titleLH;
+        y += s.lh;
       }
+      if (i < segs.length - 1) y += SEG_GAP;
     }
-    if (hasSub) {
-      y += gap;
-      ctx.font = `600 ${subLayout.size}px ${FONT_FAMILY}`;
-      for (const line of subLayout.lines) {
-        ctx.fillText(line, W / 2, y);
-        y += subLH;
-      }
-    }
+
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
