@@ -15,22 +15,31 @@ export default function InboxPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Conversation | null>(null);
 
-  // Real comments pulled from Instagram (graph.instagram.com). Falls back to
-  // the local store conversations when the account isn't connected here.
+  // Real comments + DMs pulled from Instagram (graph.instagram.com). Falls
+  // back to the local store conversations when not connected here.
   const [serverConvos, setServerConvos] = useState<Conversation[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // Hint shown when DMs require the extra scope / Instagram messages toggle.
+  const [dmNeedsSetup, setDmNeedsSetup] = useState(false);
 
   useEffect(() => {
-    fetch("/api/inbox")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.connected && Array.isArray(d.conversations)) {
-          setServerConvos(d.conversations as Conversation[]);
-        } else {
+    Promise.all([
+      fetch("/api/inbox").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/dm").then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([comments, dms]) => {
+        const anyConnected = comments?.connected || dms?.connected;
+        if (!anyConnected) {
           setServerConvos(null);
+          return;
         }
+        const merged: Conversation[] = [
+          ...((dms?.conversations as Conversation[]) ?? []),
+          ...((comments?.conversations as Conversation[]) ?? []),
+        ].sort((a, b) => (a.at < b.at ? 1 : -1));
+        setServerConvos(merged);
+        if (dms?.needsSetup) setDmNeedsSetup(true);
       })
-      .catch(() => setServerConvos(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -138,6 +147,17 @@ export default function InboxPage() {
           </Chip>
         ))}
       </div>
+
+      {/* DM setup hint */}
+      {dmNeedsSetup && (
+        <div className="mt-4 rounded-2xl border border-[var(--brand-3)]/30 bg-[var(--brand-3)]/10 p-3">
+          <p className="text-[12px] font-bold text-[var(--brand-2)]">DMを表示するには、あと1ステップ</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--fg-dim)]">
+            ① 設定から再ログインしてメッセージ権限を許可 ② Instagramアプリの
+            「設定 → メッセージとストーリーズへの返信 → 連携ツール」でメッセージへのアクセスをオンにしてください。
+          </p>
+        </div>
+      )}
 
       {/* list */}
       {loading && (
