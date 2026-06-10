@@ -1,32 +1,25 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-} from "recharts";
-import { TrendingUp, TrendingDown, MapPin, ArrowRight } from "lucide-react";
-import { Instagram } from "@/components/icons";
 import Link from "next/link";
-import { Page, SectionTitle } from "@/components/ui";
 import {
-  demoMetrics,
-  followerTrend,
-  engagementByFormat,
-  bestHours,
-} from "@/lib/mock-data";
-
-const DONUT_COLORS = ["#ff2e74", "#b026ff", "#5b6dff", "#2ee6a6"];
+  MapPin,
+  ArrowRight,
+  Plus,
+  CalendarClock,
+  BarChart3,
+  Sparkles,
+} from "lucide-react";
+import { Instagram } from "@/components/icons";
+import { Page, SectionTitle } from "@/components/ui";
+import { useApp } from "@/lib/store";
 
 export default function Dashboard() {
+  const { company, schedules, assets } = useApp();
+  const igConnected = company.connected.instagram;
+  const scheduled = schedules.filter((s) => s.status === "scheduled").length;
+  const published = schedules.filter((s) => s.status === "published").length;
+
   return (
     <Page>
       <motion.div
@@ -34,195 +27,151 @@ export default function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-5"
       >
-        <p className="text-sm text-[var(--fg-dim)]">おはようございます☀️</p>
-        <h1 className="text-2xl font-black tracking-tight">今日も伸びてます</h1>
+        <p className="text-sm text-[var(--fg-dim)]">ようこそ 👋</p>
+        <h1 className="text-2xl font-black tracking-tight">{company.name}</h1>
+        {igConnected && (
+          <p className="mt-0.5 text-[13px] font-semibold text-[var(--brand-2)]">
+            {company.igHandle} と連携中
+          </p>
+        )}
       </motion.div>
 
-      {/* Metric grid */}
+      {/* Connection status */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {demoMetrics.map((m, i) => {
-          const up = m.delta >= 0;
-          return (
-            <motion.div
-              key={m.label}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.06 }}
-              className="glass p-4"
-            >
-              <p className="text-[11px] text-[var(--fg-faint)]">{m.label}</p>
-              <p className="mt-1 text-xl font-black lg:text-2xl">{m.value}</p>
-              <p
-                className={`mt-1 flex items-center gap-1 text-[11px] font-bold ${
-                  up ? "text-[var(--ok)]" : "text-[var(--danger)]"
-                }`}
-              >
-                {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {up ? "+" : ""}
-                {m.delta}%
-              </p>
-            </motion.div>
-          );
-        })}
+        <StatusCard
+          icon={<Instagram size={18} />}
+          grad="linear-gradient(135deg,#ff7a45,#ff2e74)"
+          title="Instagram"
+          ok={igConnected}
+          okText="連携中"
+          ngText="未連携"
+        />
+        <StatusCard
+          icon={<MapPin size={18} />}
+          grad="linear-gradient(135deg,#2ee6a6,#5b6dff)"
+          title="GBP"
+          ok={company.connected.gbp}
+          okText="連携中"
+          ngText="未連携"
+        />
+        <CountCard icon={<CalendarClock size={16} />} label="予約中" value={scheduled} />
+        <CountCard icon={<Sparkles size={16} />} label="投稿済" value={published} />
       </div>
 
-      <div className="mt-4 space-y-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0">
-      {/* Follower trend */}
+      {/* Primary CTA */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
-        className="glass p-4 lg:col-span-2"
+        transition={{ delay: 0.15 }}
+        className="mt-4"
       >
-        <SectionTitle>フォロワー推移（14日）</SectionTitle>
-        <div className="h-36 lg:h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={followerTrend} margin={{ left: 0, right: 0, top: 6, bottom: 0 }}>
-              <defs>
-                <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ff2e74" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#b026ff" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Tooltip
-                contentStyle={{
-                  background: "#1b1828",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 12,
-                  fontSize: 12,
-                }}
-                labelStyle={{ color: "#b4afce" }}
-                formatter={(v) => [Number(v).toLocaleString(), "フォロワー"]}
-                labelFormatter={() => ""}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#ff2e74"
-                strokeWidth={2.5}
-                fill="url(#fg)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <Link href="/create">
+          <div
+            className="flex items-center gap-3 rounded-[22px] p-5 text-white shadow-[var(--shadow-glow)]"
+            style={{ background: "var(--grad-brand)" }}
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20">
+              <Plus size={26} />
+            </span>
+            <div className="flex-1">
+              <p className="text-base font-black">最初の投稿をつくる</p>
+              <p className="text-[12px] opacity-90">写真を1枚選ぶだけ。AIが文章を作ります。</p>
+            </div>
+            <ArrowRight size={20} />
+          </div>
+        </Link>
       </motion.div>
 
-      {/* Engagement + best hours */}
-      <div className="grid grid-cols-2 gap-3 lg:col-span-1 lg:grid-cols-1 lg:gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass p-4"
-        >
-          <p className="mb-1 text-sm font-bold">投稿タイプ別</p>
-          <div className="h-28 lg:h-32">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={engagementByFormat}
-                  dataKey="value"
-                  innerRadius={28}
-                  outerRadius={48}
-                  paddingAngle={3}
-                  stroke="none"
-                >
-                  {engagementByFormat.map((_, i) => (
-                    <Cell key={i} fill={DONUT_COLORS[i]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
+      {/* Analytics placeholder (real insights come later) */}
+      <div className="mt-5">
+        <SectionTitle>分析</SectionTitle>
+        {published === 0 ? (
+          <div className="glass flex flex-col items-center gap-2 py-10 text-center">
+            <BarChart3 size={28} className="text-[var(--fg-faint)]" />
+            <p className="text-sm font-bold">まだデータがありません</p>
+            <p className="max-w-[240px] text-[12px] text-[var(--fg-faint)]">
+              投稿を始めると、フォロワー推移やエンゲージメントがここに表示されます。
+            </p>
           </div>
-          <div className="mt-1 space-y-0.5">
-            {engagementByFormat.map((e, i) => (
-              <div key={e.name} className="flex items-center gap-1.5 text-[10px]">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: DONUT_COLORS[i] }}
-                />
-                <span className="text-[var(--fg-dim)]">{e.name}</span>
-                <span className="ml-auto font-bold">{e.value}%</span>
+        ) : (
+          <div className="glass flex flex-col items-center gap-2 py-10 text-center">
+            <BarChart3 size={28} className="text-[var(--brand-2)]" />
+            <p className="text-sm font-bold">データ収集中…</p>
+            <p className="max-w-[260px] text-[12px] text-[var(--fg-faint)]">
+              Instagramインサイトの取り込みは順次対応します。
+            </p>
+          </div>
+        )}
+      </div>
+
+      {assets.length > 0 && (
+        <div className="mt-5">
+          <SectionTitle>つくった投稿 ({assets.length})</SectionTitle>
+          <div className="grid grid-cols-3 gap-2">
+            {assets.slice(0, 6).map((a) => (
+              <div
+                key={a.id}
+                className="flex aspect-square items-center justify-center rounded-2xl text-2xl"
+                style={{ background: a.banner }}
+              >
+                {a.emoji}
               </div>
             ))}
           </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.36 }}
-          className="glass p-4"
-        >
-          <p className="mb-1 text-sm font-bold">伸びる時間帯</p>
-          <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bestHours} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
-                <XAxis
-                  dataKey="hour"
-                  tick={{ fill: "#837ea0", fontSize: 9 }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                />
-                <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-                  {bestHours.map((b, i) => (
-                    <Cell
-                      key={i}
-                      fill={b.score > 85 ? "#ff2e74" : "rgba(176,38,255,0.45)"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-[10px] text-[var(--fg-faint)]">
-            🔥 18時が最も反応◎。AIが自動でこの時間に予約します。
-          </p>
-        </motion.div>
-      </div>
-      </div>
-
-      {/* Channel status */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.42 }}
-        className="mt-4"
-      >
-        <SectionTitle
-          action={
-            <Link
-              href="/calendar"
-              className="flex items-center gap-1 text-xs font-semibold text-[var(--brand-2)]"
-            >
-              予約を見る <ArrowRight size={13} />
-            </Link>
-          }
-        >
-          連携チャネル
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="glass flex items-center gap-2.5 p-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ff7a45] to-[#ff2e74] text-white">
-              <Instagram size={18} />
-            </span>
-            <div>
-              <p className="text-sm font-bold">Instagram</p>
-              <p className="text-[10px] text-[var(--ok)]">● 連携中</p>
-            </div>
-          </div>
-          <div className="glass flex items-center gap-2.5 p-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2ee6a6] to-[#5b6dff] text-white">
-              <MapPin size={18} />
-            </span>
-            <div>
-              <p className="text-sm font-bold">GBP</p>
-              <p className="text-[10px] text-[var(--ok)]">● 連携中</p>
-            </div>
-          </div>
         </div>
-      </motion.div>
+      )}
     </Page>
+  );
+}
+
+function StatusCard({
+  icon,
+  grad,
+  title,
+  ok,
+  okText,
+  ngText,
+}: {
+  icon: React.ReactNode;
+  grad: string;
+  title: string;
+  ok: boolean;
+  okText: string;
+  ngText: string;
+}) {
+  return (
+    <div className="glass flex items-center gap-2.5 p-3">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+        style={{ background: grad }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold">{title}</p>
+        <p className={`text-[10px] ${ok ? "text-[var(--ok)]" : "text-[var(--fg-faint)]"}`}>
+          ● {ok ? okText : ngText}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CountCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="glass p-3">
+      <p className="flex items-center gap-1 text-[11px] text-[var(--fg-faint)]">
+        {icon} {label}
+      </p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+    </div>
   );
 }

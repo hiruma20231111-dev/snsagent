@@ -18,14 +18,15 @@ import {
 import { Instagram } from "@/components/icons";
 import { Page, BottomSheet, Button, Chip, Toggle } from "@/components/ui";
 import { useApp } from "@/lib/store";
-import { assetById, BANNER_GRADIENTS } from "@/lib/mock-data";
-import type { Channel, Recurrence, PostSchedule } from "@/lib/types";
+import { BANNER_GRADIENTS } from "@/lib/mock-data";
+import type { Channel, Recurrence, PostSchedule, Asset } from "@/lib/types";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
 export default function CalendarPage() {
   const {
     company,
+    assets,
     schedules,
     addAsset,
     addSchedule,
@@ -209,6 +210,7 @@ export default function CalendarPage() {
           <ScheduleRow
             key={s.id}
             s={s}
+            asset={assets.find((a) => a.id === s.assetId)}
             onToggle={() =>
               updateSchedule(s.id, {
                 status: s.status === "paused" ? "scheduled" : "paused",
@@ -316,14 +318,15 @@ function sameDay(a: Date, b: Date) {
 
 function ScheduleRow({
   s,
+  asset,
   onToggle,
   onDelete,
 }: {
   s: PostSchedule;
+  asset: Asset | undefined;
   onToggle: () => void;
   onDelete: () => void;
 }) {
-  const asset = assetById(s.assetId);
   const d = new Date(s.at);
   const time = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(
     d.getMinutes()

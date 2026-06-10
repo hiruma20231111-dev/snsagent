@@ -16,14 +16,6 @@ import type {
   AutoReplyRule,
   Credentials,
 } from "./types";
-import {
-  demoCompany,
-  demoAssets,
-  demoSchedules,
-  demoConversations,
-  demoRules,
-} from "./mock-data";
-
 interface AppState {
   company: Company;
   assets: Asset[];
@@ -51,15 +43,32 @@ interface AppContextValue extends AppState {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
-const STORAGE_KEY = "lumina_state_v1";
+const STORAGE_KEY = "lumina_state_v2";
+
+// Real starting profile (no sample data). The connected Instagram
+// account is resolved live from the OAuth cookie on mount.
+function defaultCompany(): Company {
+  return {
+    id: "cmp_pinkdolphin",
+    name: "Darts&Shotbar Pink Dolphin",
+    plan: "free",
+    igHandle: "@fuse.bar.pindol",
+    gbpName: "",
+    connected: { instagram: false, gbp: false },
+    closedDays: [],
+    aiTone: "friendly",
+    credits: 100,
+    credentials: {},
+  };
+}
 
 function initialState(): AppState {
   return {
-    company: demoCompany,
-    assets: demoAssets,
-    schedules: demoSchedules,
-    conversations: demoConversations,
-    rules: demoRules,
+    company: defaultCompany(),
+    assets: [],
+    schedules: [],
+    conversations: [],
+    rules: [],
     toast: null,
   };
 }
@@ -93,6 +102,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, [state, hydrated]);
+
+  // Reflect the real Instagram connection (from the OAuth cookie).
+  useEffect(() => {
+    if (!hydrated) return;
+    fetch("/api/integrations/instagram/status")
+      .then((r) => r.json())
+      .then((s) => {
+        if (!s.connected) return;
+        setState((prev) => ({
+          ...prev,
+          company: {
+            ...prev.company,
+            connected: { ...prev.company.connected, instagram: true },
+            igHandle: s.account?.username ? `@${s.account.username}` : prev.company.igHandle,
+          },
+        }));
+      })
+      .catch(() => {});
+  }, [hydrated]);
 
   const showToast = useCallback((msg: string) => {
     setState((s) => ({ ...s, toast: msg }));

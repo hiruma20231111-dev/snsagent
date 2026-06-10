@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { demoCompany, demoSchedules } from "@/lib/mock-data";
 
 // GET /api/saas/stats
 // ------------------------------------------------------------
@@ -8,8 +7,9 @@ import { demoCompany, demoSchedules } from "@/lib/mock-data";
 // API key so only the operator's control plane can read it.
 // Header: x-internal-key: <INTERNAL_API_KEY>
 //
-// Multi-tenant: a real implementation would aggregate per company_id.
-// Here we return the single demo tenant.
+// Multi-tenant: a real implementation aggregates per company_id from
+// the database. The app currently has no server-side DB, so this
+// returns the contract shape with empty aggregates.
 // ------------------------------------------------------------
 
 const DEFAULT_DEV_KEY = "lumina-internal-dev-key";
@@ -25,31 +25,11 @@ export async function GET(req: Request) {
     );
   }
 
-  const published = demoSchedules.filter((s) => s.status === "published").length;
-  const scheduled = demoSchedules.filter((s) => s.status === "scheduled").length;
-
   return NextResponse.json({
     ok: true,
     generatedAt: new Date().toISOString(),
-    tenants: [
-      {
-        companyId: demoCompany.id,
-        name: demoCompany.name,
-        plan: demoCompany.plan,
-        connected: demoCompany.connected,
-        creditsRemaining: demoCompany.credits,
-        usage: {
-          postsPublished: published,
-          postsScheduled: scheduled,
-          aiCallsThisMonth: 142,
-          bannersRendered: 96,
-        },
-      },
-    ],
-    totals: {
-      tenants: 1,
-      postsPublished: published,
-      postsScheduled: scheduled,
-    },
+    tenants: [],
+    totals: { tenants: 0, postsPublished: 0, postsScheduled: 0 },
+    note: "Per-tenant aggregates will be served from the database once connected.",
   });
 }

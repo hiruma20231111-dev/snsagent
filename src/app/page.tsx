@@ -84,7 +84,7 @@ export default function Landing() {
           </motion.button>
         </Link>
         <p className="mt-3 text-[11px] text-[var(--fg-faint)]">
-          デモ環境：ぱどカフェ 梅田店のデータで体験できます
+          写真を1枚選ぶだけ。Instagram連携ですぐ使えます。
         </p>
       </motion.div>
     </div>

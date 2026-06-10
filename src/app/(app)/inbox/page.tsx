@@ -24,9 +24,11 @@ export default function InboxPage() {
   });
 
   const unreadCount = conversations.filter((c) => c.unread).length;
-  const autoRate = Math.round(
-    (conversations.filter((c) => c.autoReplied).length / conversations.length) * 100
-  );
+  const autoRate = conversations.length
+    ? Math.round(
+        (conversations.filter((c) => c.autoReplied).length / conversations.length) * 100
+      )
+    : 0;
 
   // find the open conversation's latest from-store state
   const active = open ? conversations.find((c) => c.id === open.id) ?? open : null;
@@ -84,6 +86,15 @@ export default function InboxPage() {
       </div>
 
       {/* list */}
+      {filtered.length === 0 && (
+        <div className="glass mt-4 flex flex-col items-center gap-2 py-12 text-center">
+          <Bot size={28} className="text-[var(--fg-faint)]" />
+          <p className="text-sm font-bold">受信はまだありません</p>
+          <p className="max-w-[250px] text-[12px] text-[var(--fg-faint)]">
+            Instagramに届いたDM・コメントがここに集約され、自動応答できるようになります。
+          </p>
+        </div>
+      )}
       <div className="mt-4 space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
         {filtered.map((c) => (
           <motion.button
