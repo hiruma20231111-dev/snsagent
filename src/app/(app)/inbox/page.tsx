@@ -84,7 +84,7 @@ export default function InboxPage() {
       </div>
 
       {/* list */}
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-4 space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
         {filtered.map((c) => (
           <motion.button
             key={c.id}

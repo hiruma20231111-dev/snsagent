@@ -259,9 +259,11 @@ export default function CreatePage() {
               </button>
             </div>
 
+            <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
+            <div className="lg:sticky lg:top-6">
             {/* Banner preview (Auto-fit headline over photo) */}
             <div
-              className="relative mx-auto aspect-square w-full max-w-[320px] overflow-hidden rounded-2xl"
+              className="relative mx-auto aspect-square w-full max-w-[320px] overflow-hidden rounded-2xl lg:max-w-[420px]"
               style={{ background: banner }}
             >
               {photo && (
@@ -304,9 +306,11 @@ export default function CreatePage() {
                 />
               ))}
             </div>
+            </div>
 
+            <div className="min-w-0">
             {/* editable text */}
-            <div className="mt-5 space-y-3">
+            <div className="mt-5 space-y-3 lg:mt-0">
               <Field label="バナー見出し">
                 <input
                   value={title}
@@ -374,6 +378,8 @@ export default function CreatePage() {
             <Button onClick={schedule} className="mt-6 w-full" disabled={channels.length === 0}>
               <Sparkles size={16} /> この内容で予約する
             </Button>
+            </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

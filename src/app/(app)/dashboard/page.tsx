@@ -39,7 +39,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Metric grid */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {demoMetrics.map((m, i) => {
           const up = m.delta >= 0;
           return (
@@ -51,7 +51,7 @@ export default function Dashboard() {
               className="glass p-4"
             >
               <p className="text-[11px] text-[var(--fg-faint)]">{m.label}</p>
-              <p className="mt-1 text-xl font-black">{m.value}</p>
+              <p className="mt-1 text-xl font-black lg:text-2xl">{m.value}</p>
               <p
                 className={`mt-1 flex items-center gap-1 text-[11px] font-bold ${
                   up ? "text-[var(--ok)]" : "text-[var(--danger)]"
@@ -66,15 +66,16 @@ export default function Dashboard() {
         })}
       </div>
 
+      <div className="mt-4 space-y-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0">
       {/* Follower trend */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
-        className="glass mt-4 p-4"
+        className="glass p-4 lg:col-span-2"
       >
         <SectionTitle>フォロワー推移（14日）</SectionTitle>
-        <div className="h-36">
+        <div className="h-36 lg:h-72">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={followerTrend} margin={{ left: 0, right: 0, top: 6, bottom: 0 }}>
               <defs>
@@ -107,7 +108,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Engagement + best hours */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:col-span-1 lg:grid-cols-1 lg:gap-4">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -115,7 +116,7 @@ export default function Dashboard() {
           className="glass p-4"
         >
           <p className="mb-1 text-sm font-bold">投稿タイプ別</p>
-          <div className="h-28">
+          <div className="h-28 lg:h-32">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -179,6 +180,7 @@ export default function Dashboard() {
             🔥 18時が最も反応◎。AIが自動でこの時間に予約します。
           </p>
         </motion.div>
+      </div>
       </div>
 
       {/* Channel status */}

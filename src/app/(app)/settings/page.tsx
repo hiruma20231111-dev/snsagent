@@ -12,11 +12,17 @@ import {
   Check,
   Plus,
   Copy,
+  Wand2,
+  ImageIcon,
+  Plug,
+  ChevronRight,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { Page, SectionTitle, Toggle, Button, BottomSheet } from "@/components/ui";
 import { useApp } from "@/lib/store";
-import type { AIToneId } from "@/lib/types";
+import type { AIToneId, Credentials } from "@/lib/types";
 
 const TONES: { id: AIToneId; label: string; sample: string; emoji: string }[] = [
   { id: "friendly", label: "フレンドリー", sample: "今日のおすすめ、ぜひ遊びにきてね✨", emoji: "😊" },
@@ -28,8 +34,13 @@ const TONES: { id: AIToneId; label: string; sample: string; emoji: string }[] = 
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
+type SheetKind = null | "instagram" | "gbp" | "gemini" | "bannerbear";
+
 export default function SettingsPage() {
-  const { company, rules, setCompany, toggleRule, addRule, resetDemo, showToast } = useApp();
+  const { company, rules, setCompany, setCredentials, toggleRule, addRule, resetDemo, showToast } =
+    useApp();
+  const cred = company.credentials ?? {};
+  const [sheet, setSheet] = useState<SheetKind>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [kw, setKw] = useState("");
   const [reply, setReply] = useState("");
@@ -41,208 +52,308 @@ export default function SettingsPage() {
     setCompany({ closedDays: next });
   }
 
+  const igConnected = !!cred.igAccessToken;
+  const gbpConnected = !!cred.gbpAccessToken;
+
   return (
     <Page>
       <h1 className="text-2xl font-black tracking-tight">設定</h1>
-      <p className="mt-1 text-sm text-[var(--fg-dim)]">
-        ふだんは触らない設定をここに集約
-      </p>
+      <p className="mt-1 text-sm text-[var(--fg-dim)]">連携・AI・運用ルールをここに集約</p>
 
-      {/* 連携 */}
-      <div className="mt-5">
-        <SectionTitle>アカウント連携</SectionTitle>
-        <div className="glass divide-y divide-white/8">
-          <ConnectRow
-            icon={<Instagram size={18} />}
-            grad="linear-gradient(135deg,#ff7a45,#ff2e74)"
-            title="Instagram"
-            sub={company.igHandle}
-            on={company.connected.instagram}
-            onChange={(v) =>
-              setCompany({ connected: { ...company.connected, instagram: v } })
-            }
-          />
-          <ConnectRow
-            icon={<MapPin size={18} />}
-            grad="linear-gradient(135deg,#2ee6a6,#5b6dff)"
-            title="Googleビジネスプロフィール"
-            sub={company.gbpName}
-            on={company.connected.gbp}
-            onChange={(v) => setCompany({ connected: { ...company.connected, gbp: v } })}
-          />
-        </div>
-      </div>
-
-      {/* AIトーン */}
-      <div className="mt-6">
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Sparkles size={16} className="text-[var(--brand-2)]" /> AIの文章トーン
-          </span>
-        </SectionTitle>
-        <div className="space-y-2">
-          {TONES.map((t) => {
-            const active = company.aiTone === t.id;
-            return (
-              <motion.button
-                key={t.id}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setCompany({ aiTone: t.id })}
-                className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
-                  active ? "border-[var(--brand-2)] bg-[var(--brand-2)]/10" : "border-white/8 bg-white/4"
-                }`}
-              >
-                <span className="text-xl">{t.emoji}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold">{t.label}</p>
-                  <p className="truncate text-[11px] text-[var(--fg-faint)]">{t.sample}</p>
-                </div>
-                {active && (
-                  <span
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-white"
-                    style={{ background: "var(--grad-brand)" }}
-                  >
-                    <Check size={14} />
-                  </span>
-                )}
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 定休日 */}
-      <div className="mt-6">
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <CalendarOff size={16} className="text-[var(--warn)]" /> 定休日
-          </span>
-        </SectionTitle>
-        <div className="glass p-4">
-          <div className="flex justify-between gap-1.5">
-            {WD.map((w, i) => {
-              const active = company.closedDays.includes(i);
-              return (
-                <motion.button
-                  key={w}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => toggleClosedDay(i)}
-                  className={`flex h-11 flex-1 items-center justify-center rounded-xl text-sm font-bold transition-colors ${
-                    active ? "text-white" : "bg-white/5 text-[var(--fg-faint)]"
-                  }`}
-                  style={active ? { background: "var(--grad-brand)" } : undefined}
-                >
-                  {w}
-                </motion.button>
-              );
-            })}
+      <div className="mt-5 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+        {/* ===== Left column ===== */}
+        <div className="space-y-6">
+          {/* 連携・API設定 */}
+          <div>
+            <SectionTitle>
+              <span className="flex items-center gap-1.5">
+                <Plug size={16} className="text-[var(--brand-2)]" /> 連携・API設定
+              </span>
+            </SectionTitle>
+            <div className="space-y-2.5">
+              <IntegrationCard
+                grad="linear-gradient(135deg,#ff7a45,#ff2e74)"
+                icon={<Instagram size={18} />}
+                title="Instagram"
+                desc={igConnected ? "投稿・受信が有効" : "投稿には連携が必要です"}
+                connected={igConnected}
+                onClick={() => setSheet("instagram")}
+              />
+              <IntegrationCard
+                grad="linear-gradient(135deg,#2ee6a6,#5b6dff)"
+                icon={<MapPin size={18} />}
+                title="Googleビジネスプロフィール"
+                desc={gbpConnected ? "最新情報の投稿が有効" : "GBP投稿には連携が必要です"}
+                connected={gbpConnected}
+                onClick={() => setSheet("gbp")}
+              />
+              <IntegrationCard
+                grad="linear-gradient(135deg,#b026ff,#5b6dff)"
+                icon={<Wand2 size={18} />}
+                title="AI（Gemini）"
+                desc={cred.geminiKey ? "キャプション自動生成が有効" : "AI生成のAPIキー未設定"}
+                connected={!!cred.geminiKey}
+                onClick={() => setSheet("gemini")}
+              />
+              <IntegrationCard
+                grad="linear-gradient(135deg,#ffbe3d,#ff2e74)"
+                icon={<ImageIcon size={18} />}
+                title="バナー合成（Bannerbear）"
+                desc={cred.bannerbearKey ? "テンプレ合成が有効" : "画像合成のAPIキー未設定"}
+                connected={!!cred.bannerbearKey}
+                onClick={() => setSheet("bannerbear")}
+              />
+            </div>
           </div>
-          <p className="mt-3 text-[11px] text-[var(--fg-faint)]">
-            予約時に定休日の投稿をスキップ／実行するか選べます。
-          </p>
-        </div>
-      </div>
 
-      {/* 自動応答ルール */}
-      <div className="mt-6">
-        <SectionTitle
-          action={
-            <button
-              onClick={() => setRuleOpen(true)}
-              className="flex items-center gap-1 text-xs font-semibold text-[var(--brand-2)]"
-            >
-              <Plus size={14} /> 追加
-            </button>
-          }
-        >
-          <span className="flex items-center gap-1.5">
-            <Bot size={16} className="text-[var(--ok)]" /> 自動応答
-          </span>
-        </SectionTitle>
-        <div className="space-y-2">
-          {rules.map((r) => (
-            <div key={r.id} className="glass flex items-center gap-3 p-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      r.mode === "ai"
-                        ? "bg-[var(--brand-3)]/20 text-[#d9b8ff]"
-                        : "bg-white/8 text-[var(--fg-dim)]"
+          {/* AIトーン */}
+          <div>
+            <SectionTitle>
+              <span className="flex items-center gap-1.5">
+                <Sparkles size={16} className="text-[var(--brand-2)]" /> AIの文章トーン
+              </span>
+            </SectionTitle>
+            <div className="space-y-2">
+              {TONES.map((t) => {
+                const active = company.aiTone === t.id;
+                return (
+                  <motion.button
+                    key={t.id}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setCompany({ aiTone: t.id })}
+                    className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
+                      active
+                        ? "border-[var(--brand-2)] bg-[var(--brand-2)]/10"
+                        : "border-white/8 bg-white/4"
                     }`}
                   >
-                    {r.mode === "ai" ? "AI応答" : `「${r.keyword}」`}
-                  </span>
-                </div>
-                <p className="mt-1 truncate text-[11px] text-[var(--fg-faint)]">{r.reply}</p>
-              </div>
-              <Toggle on={r.enabled} onChange={() => toggleRule(r.id)} />
+                    <span className="text-xl">{t.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold">{t.label}</p>
+                      <p className="truncate text-[11px] text-[var(--fg-faint)]">{t.sample}</p>
+                    </div>
+                    {active && (
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white"
+                        style={{ background: "var(--grad-brand)" }}
+                      >
+                        <Check size={14} />
+                      </span>
+                    )}
+                  </motion.button>
+                );
+              })}
             </div>
-          ))}
+          </div>
         </div>
-      </div>
 
-      {/* マザーボード連携API */}
-      <div className="mt-6">
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Server size={16} className="text-[var(--brand-4)]" /> マザーボード連携
-          </span>
-        </SectionTitle>
-        <div className="glass p-4">
-          <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
-            運営側の管理アプリは、内部APIキーで保護された統計エンドポイントから
-            全テナントの利用状況を取得します。
-          </p>
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2.5 font-mono text-[11px]">
-            <span className="text-[var(--ok)]">GET</span>
-            <span className="flex-1 truncate text-[var(--fg-dim)]">/api/saas/stats</span>
+        {/* ===== Right column ===== */}
+        <div className="mt-6 space-y-6 lg:mt-0">
+          {/* 定休日 */}
+          <div>
+            <SectionTitle>
+              <span className="flex items-center gap-1.5">
+                <CalendarOff size={16} className="text-[var(--warn)]" /> 定休日
+              </span>
+            </SectionTitle>
+            <div className="glass p-4">
+              <div className="flex justify-between gap-1.5">
+                {WD.map((w, i) => {
+                  const active = company.closedDays.includes(i);
+                  return (
+                    <motion.button
+                      key={w}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => toggleClosedDay(i)}
+                      className={`flex h-11 flex-1 items-center justify-center rounded-xl text-sm font-bold transition-colors ${
+                        active ? "text-white" : "bg-white/5 text-[var(--fg-faint)]"
+                      }`}
+                      style={active ? { background: "var(--grad-brand)" } : undefined}
+                    >
+                      {w}
+                    </motion.button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-[11px] text-[var(--fg-faint)]">
+                予約時に定休日の投稿をスキップ／実行するか選べます。
+              </p>
+            </div>
+          </div>
+
+          {/* 自動応答ルール */}
+          <div>
+            <SectionTitle
+              action={
+                <button
+                  onClick={() => setRuleOpen(true)}
+                  className="flex items-center gap-1 text-xs font-semibold text-[var(--brand-2)]"
+                >
+                  <Plus size={14} /> 追加
+                </button>
+              }
+            >
+              <span className="flex items-center gap-1.5">
+                <Bot size={16} className="text-[var(--ok)]" /> 自動応答
+              </span>
+            </SectionTitle>
+            <div className="space-y-2">
+              {rules.map((r) => (
+                <div key={r.id} className="glass flex items-center gap-3 p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          r.mode === "ai"
+                            ? "bg-[var(--brand-3)]/20 text-[#d9b8ff]"
+                            : "bg-white/8 text-[var(--fg-dim)]"
+                        }`}
+                      >
+                        {r.mode === "ai" ? "AI応答" : `「${r.keyword}」`}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-[11px] text-[var(--fg-faint)]">{r.reply}</p>
+                  </div>
+                  <Toggle on={r.enabled} onChange={() => toggleRule(r.id)} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* マザーボード連携API */}
+          <div>
+            <SectionTitle>
+              <span className="flex items-center gap-1.5">
+                <Server size={16} className="text-[var(--brand-4)]" /> マザーボード連携
+              </span>
+            </SectionTitle>
+            <div className="glass p-4">
+              <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">
+                運営側の管理アプリは、内部APIキーで保護された統計エンドポイントから
+                全テナントの利用状況を取得します。
+              </p>
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2.5 font-mono text-[11px]">
+                <span className="text-[var(--ok)]">GET</span>
+                <span className="flex-1 truncate text-[var(--fg-dim)]">/api/saas/stats</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`${location.origin}/api/saas/stats`);
+                    showToast("エンドポイントをコピーしました");
+                  }}
+                  className="rounded-md bg-white/8 p-1.5"
+                >
+                  <Copy size={13} />
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--fg-faint)]">
+                ヘッダー <code className="text-[var(--brand-2)]">x-internal-key</code> で認証 ・ company_id 単位でデータ隔離
+              </p>
+            </div>
+          </div>
+
+          {/* プラン + リセット */}
+          <div>
+            <div className="glass flex items-center justify-between p-4">
+              <div>
+                <p className="text-sm font-bold">現在のプラン</p>
+                <p className="text-[11px] text-[var(--fg-faint)]">
+                  {company.plan.toUpperCase()} ・ 残り {company.credits} クレジット
+                </p>
+              </div>
+              <span
+                className="rounded-full px-3 py-1.5 text-xs font-bold text-white"
+                style={{ background: "var(--grad-brand)" }}
+              >
+                {company.plan.toUpperCase()}
+              </span>
+            </div>
             <button
               onClick={() => {
-                navigator.clipboard?.writeText(`${location.origin}/api/saas/stats`);
-                showToast("エンドポイントをコピーしました");
+                resetDemo();
+                showToast("データをリセットしました");
               }}
-              className="rounded-md bg-white/8 p-1.5"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-semibold text-[var(--fg-dim)]"
             >
-              <Copy size={13} />
+              <RotateCcw size={15} /> データをリセット
             </button>
           </div>
-          <p className="mt-2 text-[10px] text-[var(--fg-faint)]">
-            ヘッダー <code className="text-[var(--brand-2)]">x-internal-key</code> で認証 ・ company_id 単位でデータ隔離
-          </p>
         </div>
-      </div>
-
-      {/* プラン + リセット */}
-      <div className="mt-6">
-        <div className="glass flex items-center justify-between p-4">
-          <div>
-            <p className="text-sm font-bold">現在のプラン</p>
-            <p className="text-[11px] text-[var(--fg-faint)]">
-              {company.plan.toUpperCase()} ・ 残り {company.credits} クレジット
-            </p>
-          </div>
-          <span
-            className="rounded-full px-3 py-1.5 text-xs font-bold text-white"
-            style={{ background: "var(--grad-brand)" }}
-          >
-            {company.plan.toUpperCase()}
-          </span>
-        </div>
-        <button
-          onClick={() => {
-            resetDemo();
-            showToast("デモデータをリセットしました");
-          }}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-semibold text-[var(--fg-dim)]"
-        >
-          <RotateCcw size={15} /> デモデータをリセット
-        </button>
       </div>
 
       <p className="mt-6 text-center text-[10px] text-[var(--fg-faint)]">
         Lumina v0.1 — AI SNSオートパイロット
       </p>
+
+      {/* ===== Integration sheets ===== */}
+      <BottomSheet open={sheet === "instagram"} onClose={() => setSheet(null)} title="Instagram 連携">
+        <ConnectForm
+          intro="Instagram Graph API（Meta）で取得した情報を入力します。対象は「プロアカウント（ビジネス/クリエイター）」で、Facebookページとの連携が必要です。"
+          docLabel="Meta for Developers を開く"
+          docUrl="https://developers.facebook.com/"
+          fields={[
+            { key: "igAccessToken", label: "アクセストークン", placeholder: "EAAB... から始まる長期トークン", secret: true },
+            { key: "igBusinessId", label: "Instagram ビジネスアカウントID", placeholder: "17841400000000000" },
+          ]}
+          cred={cred}
+          onSave={(vals) => {
+            setCredentials(vals);
+            setCompany({ connected: { ...company.connected, instagram: !!vals.igAccessToken } });
+            setSheet(null);
+            showToast(vals.igAccessToken ? "Instagramを連携しました" : "保存しました");
+          }}
+          oauthLabel="Instagramでログインして連携（審査後に有効化）"
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet === "gbp"} onClose={() => setSheet(null)} title="GBP 連携">
+        <ConnectForm
+          intro="Googleビジネスプロフィールの最新情報を自動投稿します。Google Cloud で Business Profile API を有効化し、OAuthで取得したトークンを入力します。"
+          docLabel="Google Cloud Console を開く"
+          docUrl="https://console.cloud.google.com/"
+          fields={[
+            { key: "gbpAccessToken", label: "アクセストークン", placeholder: "ya29... から始まるトークン", secret: true },
+            { key: "gbpLocationId", label: "ロケーションID", placeholder: "locations/0000000000000000000" },
+          ]}
+          cred={cred}
+          onSave={(vals) => {
+            setCredentials(vals);
+            setCompany({ connected: { ...company.connected, gbp: !!vals.gbpAccessToken } });
+            setSheet(null);
+            showToast(vals.gbpAccessToken ? "GBPを連携しました" : "保存しました");
+          }}
+          oauthLabel="Googleで連携（API承認後に有効化）"
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet === "gemini"} onClose={() => setSheet(null)} title="AI（Gemini）設定">
+        <ConnectForm
+          intro="キャプションとバナー文字の自動生成に使います。コスト最小のミドルクラスモデル（Gemini 1.5 Flash）を想定。"
+          docLabel="Google AI Studio でキー発行"
+          docUrl="https://aistudio.google.com/apikey"
+          fields={[{ key: "geminiKey", label: "Gemini APIキー", placeholder: "AIza... から始まるキー", secret: true }]}
+          cred={cred}
+          onSave={(vals) => {
+            setCredentials(vals);
+            setSheet(null);
+            showToast(vals.geminiKey ? "AIキーを保存しました" : "保存しました");
+          }}
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet === "bannerbear"} onClose={() => setSheet(null)} title="バナー合成 設定">
+        <ConnectForm
+          intro="プロのテンプレートにAIの文字と写真を自動で流し込み、文字のはみ出し（Auto-fit）を防ぎます。"
+          docLabel="Bannerbear を開く"
+          docUrl="https://www.bannerbear.com/"
+          fields={[{ key: "bannerbearKey", label: "Bannerbear APIキー", placeholder: "bb_pr_... から始まるキー", secret: true }]}
+          cred={cred}
+          onSave={(vals) => {
+            setCredentials(vals);
+            setSheet(null);
+            showToast(vals.bannerbearKey ? "バナーキーを保存しました" : "保存しました");
+          }}
+        />
+      </BottomSheet>
 
       {/* add rule sheet */}
       <BottomSheet open={ruleOpen} onClose={() => setRuleOpen(false)} title="自動応答ルールを追加">
@@ -297,36 +408,119 @@ export default function SettingsPage() {
   );
 }
 
-function ConnectRow({
-  icon,
+function IntegrationCard({
   grad,
+  icon,
   title,
-  sub,
-  on,
-  onChange,
+  desc,
+  connected,
+  onClick,
 }: {
-  icon: React.ReactNode;
   grad: string;
+  icon: React.ReactNode;
   title: string;
-  sub: string;
-  on: boolean;
-  onChange: (v: boolean) => void;
+  desc: string;
+  connected: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 p-4">
+    <motion.button
+      whileTap={{ scale: 0.99 }}
+      onClick={onClick}
+      className="glass flex w-full items-center gap-3 p-3.5 text-left"
+    >
       <span
-        className="flex h-10 w-10 items-center justify-center rounded-xl text-white"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
         style={{ background: grad }}
       >
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold">{title}</p>
-        <p className="truncate text-[11px] text-[var(--fg-faint)]">
-          {on ? sub : "未連携"}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-bold">{title}</p>
+          <span
+            className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+              connected ? "bg-[var(--ok)]/15 text-[var(--ok)]" : "bg-white/8 text-[var(--fg-faint)]"
+            }`}
+          >
+            {connected ? <Check size={9} /> : null}
+            {connected ? "連携中" : "未連携"}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-[11px] text-[var(--fg-faint)]">{desc}</p>
       </div>
-      <Toggle on={on} onChange={onChange} />
+      <ChevronRight size={18} className="text-[var(--fg-faint)]" />
+    </motion.button>
+  );
+}
+
+function ConnectForm({
+  intro,
+  fields,
+  cred,
+  onSave,
+  docLabel,
+  docUrl,
+  oauthLabel,
+}: {
+  intro: string;
+  fields: { key: keyof Credentials; label: string; placeholder: string; secret?: boolean }[];
+  cred: Credentials;
+  onSave: (vals: Partial<Credentials>) => void;
+  docLabel: string;
+  docUrl: string;
+  oauthLabel?: string;
+}) {
+  const [vals, setVals] = useState<Partial<Credentials>>(() => {
+    const init: Partial<Credentials> = {};
+    fields.forEach((f) => (init[f.key] = cred[f.key]));
+    return init;
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2.5 rounded-2xl border border-white/10 bg-white/5 p-3">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--brand-2)]" />
+        <p className="text-[12px] leading-relaxed text-[var(--fg-dim)]">{intro}</p>
+      </div>
+
+      {oauthLabel && (
+        <button
+          disabled
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/5 py-3 text-sm font-semibold text-[var(--fg-faint)] opacity-70"
+        >
+          <Plug size={15} /> {oauthLabel}
+        </button>
+      )}
+
+      {fields.map((f) => (
+        <div key={f.key} className="glass px-4 py-3">
+          <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--fg-faint)]">
+            {f.label}
+          </p>
+          <input
+            type={f.secret ? "password" : "text"}
+            value={(vals[f.key] as string) ?? ""}
+            onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+            placeholder={f.placeholder}
+            autoComplete="off"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
+          />
+        </div>
+      ))}
+
+      <a
+        href={docUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-2)]"
+      >
+        <ExternalLink size={13} /> {docLabel}
+      </a>
+
+      <Button onClick={() => onSave(vals)} className="w-full">
+        <Check size={16} /> 保存して連携
+      </Button>
     </div>
   );
 }

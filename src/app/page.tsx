@@ -13,7 +13,7 @@ const features = [
 
 export default function Landing() {
   return (
-    <div className="app-shell flex flex-col items-center px-6 pb-10 pt-16 text-center">
+    <div className="app-shell flex flex-col items-center px-6 pb-10 pt-16 text-center lg:mx-auto lg:max-w-[480px]">
       <motion.div
         initial={{ scale: 0.6, opacity: 0, rotate: -12 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}

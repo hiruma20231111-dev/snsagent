@@ -131,8 +131,9 @@ export default function CalendarPage() {
         </motion.button>
       </div>
 
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
       {/* month nav */}
-      <div className="glass p-4">
+      <div className="glass p-4 lg:p-6">
         <div className="mb-3 flex items-center justify-between">
           <button onClick={() => shiftMonth(-1)} className="rounded-full bg-white/8 p-1.5">
             <ChevronLeft size={18} />
@@ -201,7 +202,8 @@ export default function CalendarPage() {
       </div>
 
       {/* upcoming list */}
-      <p className="mb-2 mt-5 text-sm font-bold">今後の予約 ({upcoming.length})</p>
+      <div className="min-w-0">
+      <p className="mb-2 mt-5 text-sm font-bold lg:mt-0">今後の予約 ({upcoming.length})</p>
       <div className="space-y-2.5">
         {upcoming.map((s) => (
           <ScheduleRow
@@ -223,6 +225,8 @@ export default function CalendarPage() {
             予約はまだありません。日付をタップして追加できます。
           </div>
         )}
+      </div>
+      </div>
       </div>
 
       {/* new schedule sheet */}

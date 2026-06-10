@@ -175,7 +175,7 @@ export function Page({ children }: { children: ReactNode }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      className="px-4 pb-28 pt-4"
+      className="px-4 pb-28 pt-4 lg:px-10 lg:pb-12 lg:pt-9"
     >
       {children}
     </motion.div>

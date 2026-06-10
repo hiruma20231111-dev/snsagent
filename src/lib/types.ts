@@ -18,6 +18,20 @@ export interface Company {
   closedDays: number[]; // 0=Sun ... 6=Sat
   aiTone: AIToneId;
   credits: number;
+  /** Per-tenant integration credentials (entered in /settings). */
+  credentials?: Credentials;
+}
+
+export interface Credentials {
+  // Instagram Graph API (Meta)
+  igAccessToken?: string;
+  igBusinessId?: string;
+  // Google Business Profile
+  gbpAccessToken?: string;
+  gbpLocationId?: string;
+  // AI / banner
+  geminiKey?: string;
+  bannerbearKey?: string;
 }
 
 /** A reusable banner + caption asset (contents table). */

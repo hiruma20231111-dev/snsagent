@@ -102,18 +102,24 @@ body {
   50% { transform: translate(6%, 8%) scale(1.15); }
 }
 
-/* Phone shell on desktop, edge-to-edge on mobile */
+/* ----- Responsive shell -----
+   Mobile / tablet: centered phone frame (unchanged).
+   Desktop (>=1024px): full-width app, sidebar layout takes over. */
 .app-shell {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
-  min-height: 100dvh;
-  background: linear-gradient(180deg, rgba(19, 17, 31, 0.7), rgba(11, 10, 20, 0.92));
-  backdrop-filter: blur(8px);
 }
-@media (min-width: 540px) {
+@media (max-width: 1023px) {
+  .app-shell {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    background: linear-gradient(180deg, rgba(19, 17, 31, 0.7), rgba(11, 10, 20, 0.92));
+    backdrop-filter: blur(8px);
+  }
+}
+@media (min-width: 540px) and (max-width: 1023px) {
   .app-shell {
     min-height: calc(100dvh - 32px);
     margin-top: 16px;
@@ -122,6 +128,25 @@ body {
     border: 1px solid var(--border);
     box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
     overflow: hidden;
+  }
+}
+@media (min-width: 1024px) {
+  .app-shell {
+    flex: 1;
+    min-height: 100dvh;
+  }
+}
+
+/* Desktop layout wrapper */
+.desk-wrap {
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .desk-wrap {
+    display: flex;
+    max-width: 1320px;
+    margin: 0 auto;
+    gap: 0;
   }
 }
 

@@ -14,6 +14,7 @@ import type {
   PostSchedule,
   Conversation,
   AutoReplyRule,
+  Credentials,
 } from "./types";
 import {
   demoCompany,
@@ -34,6 +35,7 @@ interface AppState {
 
 interface AppContextValue extends AppState {
   setCompany: (patch: Partial<Company>) => void;
+  setCredentials: (patch: Partial<Credentials>) => void;
   addAsset: (a: Asset) => void;
   addSchedule: (s: PostSchedule) => void;
   updateSchedule: (id: string, patch: Partial<PostSchedule>) => void;
@@ -101,6 +103,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...state,
     setCompany: (patch) =>
       setState((s) => ({ ...s, company: { ...s.company, ...patch } })),
+    setCredentials: (patch) =>
+      setState((s) => ({
+        ...s,
+        company: {
+          ...s.company,
+          credentials: { ...s.company.credentials, ...patch },
+        },
+      })),
     addAsset: (a) => setState((s) => ({ ...s, assets: [a, ...s.assets] })),
     addSchedule: (sc) =>
       setState((s) => ({ ...s, schedules: [...s.schedules, sc] })),
