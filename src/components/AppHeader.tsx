@@ -1,11 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap } from "lucide-react";
+import Link from "next/link";
+import { Instagram } from "@/components/icons";
 import { useApp } from "@/lib/store";
 
 export default function AppHeader() {
   const { company } = useApp();
+  const connected = company.connected.instagram;
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 backdrop-blur-xl">
       <div className="flex items-center gap-2.5">
@@ -22,11 +24,28 @@ export default function AppHeader() {
           <p className="mt-0.5 text-[11px] text-[var(--fg-faint)]">{company.name}</p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 rounded-full border border-white/12 bg-white/5 px-3 py-1.5">
-        <Zap size={13} className="text-[var(--warn)]" fill="currentColor" />
-        <span className="text-xs font-bold">{company.credits}</span>
-        <span className="text-[10px] text-[var(--fg-faint)]">クレジット</span>
-      </div>
+
+      {/* Always-visible connection status */}
+      <Link
+        href="/settings"
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 ${
+          connected
+            ? "border-[var(--ok)]/30 bg-[var(--ok)]/10"
+            : "border-white/12 bg-white/5"
+        }`}
+      >
+        <Instagram
+          size={13}
+          className={connected ? "text-[var(--ok)]" : "text-[var(--fg-faint)]"}
+        />
+        <span
+          className={`max-w-[110px] truncate text-[11px] font-bold ${
+            connected ? "text-[var(--ok)]" : "text-[var(--fg-faint)]"
+          }`}
+        >
+          {connected ? company.igHandle : "未連携"}
+        </span>
+      </Link>
     </header>
   );
 }

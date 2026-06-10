@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, CalendarDays, MessageCircle, Settings, Plus, Zap } from "lucide-react";
+import { Home, CalendarDays, MessageCircle, Settings, Plus } from "lucide-react";
+import { Instagram } from "@/components/icons";
 import { useApp } from "@/lib/store";
 
 const items = [
@@ -70,11 +71,30 @@ export default function SideNav() {
       })}
 
       <div className="mt-auto">
-        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-3">
-          <Zap size={15} className="text-[var(--warn)]" fill="currentColor" />
-          <span className="text-sm font-bold">{company.credits}</span>
-          <span className="text-[11px] text-[var(--fg-faint)]">クレジット残</span>
-        </div>
+        <Link href="/settings">
+          <div
+            className={`flex items-center gap-2.5 rounded-2xl border px-3.5 py-3 ${
+              company.connected.instagram
+                ? "border-[var(--ok)]/30 bg-[var(--ok)]/10"
+                : "border-white/10 bg-white/5"
+            }`}
+          >
+            <Instagram
+              size={17}
+              className={
+                company.connected.instagram ? "text-[var(--ok)]" : "text-[var(--fg-faint)]"
+              }
+            />
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[13px] font-bold">
+                {company.connected.instagram ? company.igHandle : "未連携"}
+              </p>
+              <p className="text-[10px] text-[var(--fg-faint)]">
+                {company.connected.instagram ? "Instagram連携中" : "タップして連携"}
+              </p>
+            </div>
+          </div>
+        </Link>
       </div>
     </aside>
   );

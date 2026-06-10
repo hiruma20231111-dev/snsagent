@@ -258,7 +258,7 @@ export default function SettingsPage() {
               <div>
                 <p className="text-sm font-bold">現在のプラン</p>
                 <p className="text-[11px] text-[var(--fg-faint)]">
-                  {company.plan.toUpperCase()} ・ 残り {company.credits} クレジット
+                  {company.plan.toUpperCase()} プラン
                 </p>
               </div>
               <span
