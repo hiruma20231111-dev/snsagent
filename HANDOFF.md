@@ -233,3 +233,14 @@
 - 画面 `(app)/autopilot/page.tsx`: ON/OFF・ペルソナ・頻度(週N/曜日/時間帯)・写真バンク(一括アップ→AI生成)・自動予約キュー表示。
 - **制約/前提**: 対象は当面 **Instagramフィード**（ストーリー焼き込みはクライアントCanvasのためサーバー自動化は別途）。GBPは承認待ちでskip。実投稿には §11 の IG再ログイン（トークン保存）が必要。
 - 本番E2E検証OK: config保存→bank追加→plan(created:1, 夕方帯/指定曜日に配置)→schedule反映→cleanup。
+
+---
+
+## 13. 2026-06-11 セッション追記④（キーワード順位チェック / MEO）— commit `9ee33b4`
+- 上部タブに **「順位」** 追加。`(app)/rank/page.tsx`: 店舗(店舗名/住所)＋追跡キーワードを登録し、現在順位・前回比トレンドを表示。「今すぐ計測」ボタン。
+- エンジン `src/lib/places.ts`（**Google Places legacy API**）: `findplacefromtext` で店舗を place_id＋座標に解決→各KWを `textsearch`（location bias）し結果内の自店位置＝順位（圏外=null）。
+- データ `server-store`: `rank/config.json`（店舗＋解決済みplace_id/lat/lng）, `rank/kw/{id}.json`（履歴付きキーワード, 最新30点）。
+- API: `GET/POST /api/rank/config`、`GET/POST/DELETE /api/rank/keywords`、`POST /api/rank/check`。
+- **要設定**: 環境変数 **`GOOGLE_PLACES_API_KEY`**（または `GOOGLE_MAPS_API_KEY`）。Google Cloudで **Places API 有効化＋課金**。未設定時は `needsKey:true` でガイド返却＝管理のみ可能（graceful degrade）。本番スモークでGET/POST/keywords/check/cleanup確認済。
+- 注意: 正確なMEO順位は本来グリッド計測。本実装はText Search1ページ(≈20件)内の位置による近似。必要なら将来グリッドサンプリングへ拡張。
+- 残提案（リサーチ由来・未着手）: GBP口コミAI返信（72hルール・AI Adapter流用）、おまかせのストーリー対応（サーバーCanvas）。
