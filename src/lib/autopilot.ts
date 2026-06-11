@@ -17,8 +17,29 @@ import {
 import { pickTime } from "./persona";
 import type { Channel } from "./types";
 
-function dayKey(d: Date) {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+// The server runs in UTC, but persona time bands mean JST wall-clock. Work in
+// JST (UTC+9, no DST) so "night 21:30" really posts at 21:30 in Japan.
+const JST_MS = 9 * 60 * 60 * 1000;
+
+/** JST calendar parts for a UTC millisecond timestamp. */
+function jstParts(ms: number) {
+  const d = new Date(ms + JST_MS);
+  return {
+    y: d.getUTCFullYear(),
+    m: d.getUTCMonth(),
+    day: d.getUTCDate(),
+    dow: d.getUTCDay(),
+  };
+}
+
+/** UTC millisecond timestamp for a JST wall-clock date+time. */
+function jstInstant(y: number, m: number, day: number, hour: number, minute: number) {
+  return Date.UTC(y, m, day, hour, minute) - JST_MS;
+}
+
+function dayKeyMs(ms: number) {
+  const p = jstParts(ms);
+  return `${p.y}-${p.m}-${p.day}`;
 }
 
 export async function planAutopilot(): Promise<{ created: number; reason?: string }> {
@@ -43,23 +64,23 @@ export async function planAutopilot(): Promise<{ created: number; reason?: strin
   const bank = (await listBank()).filter((b) => !b.used);
   if (!bank.length) return { created: 0, reason: "bank-empty" };
 
-  // at most one autopilot post per day → track days already taken
-  const usedDays = new Set(futureAuto.map((p) => dayKey(new Date(p.scheduledAt))));
+  // at most one autopilot post per day (JST) → track days already taken
+  const usedDays = new Set(futureAuto.map((p) => dayKeyMs(new Date(p.scheduledAt).getTime())));
 
   let created = 0;
   let bi = 0;
-  let cursor = new Date(now + 86400000); // start from tomorrow
-  cursor.setHours(0, 0, 0, 0);
-
-  while (need > 0 && cursor <= horizonEnd && bi < bank.length) {
-    const dow = cursor.getDay();
+  // iterate JST calendar days, starting tomorrow (JST)
+  for (let offset = 1; need > 0 && bi < bank.length && offset <= cfg.lookaheadDays; offset++) {
+    const dayMs = now + offset * 86400000;
+    if (dayMs > horizonEnd.getTime() + 86400000) break;
+    const { y, m, day, dow } = jstParts(dayMs);
     const dayOk = cfg.preferredDays.length === 0 || cfg.preferredDays.includes(dow);
-    const key = dayKey(cursor);
+    const key = `${y}-${m}-${day}`;
     if (dayOk && !usedDays.has(key)) {
       const t = pickTime(cfg);
-      const at = new Date(cursor);
-      at.setHours(t.hour, t.minute, 0, 0);
-      if (at.getTime() > now) {
+      const atMs = jstInstant(y, m, day, t.hour, t.minute);
+      if (atMs > now) {
+        const at = new Date(atMs);
         const item = bank[bi++];
         const stamp = new Date().toISOString();
         const fmt = item.format ?? cfg.format ?? "feed";
@@ -86,7 +107,6 @@ export async function planAutopilot(): Promise<{ created: number; reason?: strin
         need--;
       }
     }
-    cursor = new Date(cursor.getTime() + 86400000);
   }
 
   return { created };
