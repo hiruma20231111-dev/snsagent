@@ -9,7 +9,7 @@ export default function AppHeader() {
   const { company } = useApp();
   const connected = company.connected.instagram;
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 backdrop-blur-xl">
+    <header className="flex items-center justify-between bg-[#0b0a14]/85 px-4 py-3 backdrop-blur-xl">
       <div className="flex items-center gap-2.5">
         <motion.div
           initial={{ rotate: -8, scale: 0.9 }}

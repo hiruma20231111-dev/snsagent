@@ -130,3 +130,40 @@ export interface AIAnalysis {
   banner: string; // gradient stand-in
   model: string; // which adapter served it
 }
+
+// ============================================================
+// Autopilot — persona-driven "set it and forget it" auto-posting
+// ============================================================
+
+/** Target audience the AI tailors content + timing to. */
+export interface Persona {
+  label: string; // 呼称 e.g. "仕事帰りの常連"
+  audience: string; // 年齢層・属性 e.g. "30〜40代・会社員"
+  lifestyle: string; // 生活動線・興味（自由記述）
+  tone: AIToneId;
+}
+
+/** Time-of-day band the AI posts in (auto = derived from the persona). */
+export type TimeBand = "auto" | "morning" | "lunch" | "afternoon" | "evening" | "night";
+
+export interface AutopilotConfig {
+  enabled: boolean;
+  persona: Persona;
+  postsPerWeek: number; // 1..14
+  preferredDays: number[]; // 0=Sun..6=Sat ; empty = any day
+  timeBand: TimeBand;
+  channels: Channel[]; // currently Instagram feed
+  lookaheadDays: number; // how far ahead to keep the queue filled
+  updatedAt: string;
+}
+
+/** A ready-to-post draft (photo + persona-tuned copy) the autopilot draws from. */
+export interface BankItem {
+  id: string;
+  imageUrl: string; // public blob URL (full image)
+  caption: string;
+  hashtags: string[];
+  title?: string;
+  used: boolean;
+  createdAt: string;
+}

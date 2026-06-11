@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listPosts, updatePost, getIgToken, saveIgToken } from "@/lib/server-store";
 import { publishToInstagram, refreshLongLivedToken, resolveIgUserId } from "@/lib/instagram";
+import { planAutopilot } from "@/lib/autopilot";
 
 // node:crypto (token decryption) + enough wall-clock for container polling.
 export const runtime = "nodejs";
@@ -24,6 +25,14 @@ async function run(req: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  // 0) Autopilot: top up the upcoming queue from the photo bank (persona-timed).
+  let planned = { created: 0 } as { created: number; reason?: string };
+  try {
+    planned = await planAutopilot();
+  } catch {
+    /* planning is best-effort; never block publishing */
+  }
+
   // 1) Token (persisted by the OAuth callback). Without it, cron can't post.
   let tok = await getIgToken();
   if (!tok?.accessToken) {
@@ -31,6 +40,7 @@ async function run(req: Request) {
       ok: false,
       error: "保存済みのInstagramトークンがありません。設定から再ログインしてください。",
       processed: 0,
+      planned: planned.created,
     });
   }
 
@@ -94,6 +104,7 @@ async function run(req: Request) {
   return NextResponse.json({
     ok: true,
     now: new Date(now).toISOString(),
+    planned: planned.created,
     processed: due.length,
     published: results.filter((r) => r.status === "published").length,
     failed: results.filter((r) => r.status === "failed").length,
