@@ -169,3 +169,46 @@
 ### 新規/変更ファイル
 - 新規: `src/lib/story-image.ts`, `src/lib/gbp.ts`, `src/app/api/auth/google/{login,callback}/route.ts`, `src/app/api/integrations/gbp/{config,status}/route.ts`, `src/app/api/gbp/locations/route.ts`
 - 変更: `src/app/(app)/create/page.tsx`, `src/app/(app)/settings/page.tsx`
+
+---
+
+## 11. 2026-06-11 セッション追記②（UX改修＋予約DB永続化＋cron自動投稿）
+
+### A) 投稿UX大改修 — commit `67a495f`
+- create を「①投稿先(IG/GBP/両方)→②形式(フィード/ストーリーズ。**リール非表示**)→③写真→作成→公開方法(即時/予約・**日時指定**)」に再設計。
+- `story-image.ts` を**全面フィット(cover)**に刷新し letterbox の分割表示を廃止。タイトル/サブ/キャプション/タグを
+  **正規化座標＋個別サイズ**で焼き込み（`defaultStoryElements`/`STORY_ELEMENT_META` export）。create でD&D配置＋スライダーでサイズ調整・レイヤーON/OFF・色指定（WYSIWYG）。
+- calendar に**画像プレビュー**サムネ＋日セル薄プレビュー、行/日タップで**本文・投稿日時・チャネルを編集**できる `EditScheduleSheet`（ストーリーはテキスト編集時に再焼き込み）。
+- types/store 拡張: Asset に `photo/subtitle/format/previewImage/storyElements`、`updateAsset`、画像縮小ユーティリティ `src/lib/image.ts`。
+
+### B) 予約のDB永続化＋cron自動投稿（§7C-1/2 を解決） — commit `3c60b60`→`7c69cf7`
+- **ストレージ＝Vercel Blob を簡易DBとして使用**（Postgres未接続のため。**単一テナントMVP。多テナント化時は Neon/Postgres へ移行**＝`src/lib/server-store.ts` が継ぎ目）。
+  - 予約台帳: `schedules/{id}.json`（公開Blob。caption/画像はIG上どのみち公開）。CRUDは `server-store.ts`。
+  - **IGトークンは AES-256-GCM 暗号化**して `auth/ig-token.json` に保管（Blobは公開だが暗号文なので安全）。鍵は env `TOKEN_ENC_KEY`。
+  - Blob上書きは CDN キャッシュで見えないことがあるため put 時 `cacheControlMaxAge:0`＋読取時 `?_cb=` でキャッシュ回避。
+- `instagram/callback`: Cookie に加え暗号化トークンを台帳へ upsert（→cronがブラウザ無しで投稿可能）。**Node runtime**。
+- 共有ロジック `src/lib/instagram.ts`: `publishToInstagram`/`refreshLongLivedToken`/`resolveIgUserId`。`/api/publish/instagram` はこれを呼ぶだけに。
+- API: `GET/POST /api/schedule`、`PATCH/DELETE /api/schedule/[id]`（いずれも Node runtime）。
+- **cron `/api/cron/publish`**（Node runtime, maxDuration 60）: `CRON_SECRET` 認証（`Authorization: Bearer` か `?secret=`）。
+  due投稿を`publishing`にclaim→IG公開→`published/failed`更新。期限<10日のトークンは自動 refresh。**GBPは承認待ちのため skip**。
+- env 追加（Production）: **`TOKEN_ENC_KEY`**（base64 32B）, **`CRON_SECRET`**。※どちらもCLI追加のため `vercel env pull` では平文取得不可。
+- クライアント: create の予約時に最終画像（ストーリーは焼き込み済み）を `/api/upload`→公開URL→`/api/schedule` 登録。calendar の編集/削除/一時停止を台帳へ同期。
+
+### ⚠️ 実行頻度の制約（要対応）
+- **Vercel Hobbyプランは cron が日次1回まで**。そのため `vercel.json` は暫定で `0 3 * * *`（毎日03:00スイープ）。
+- **分単位の予約時刻どおりに投稿するには以下のいずれか**:
+  1. **Vercel Pro へ升级** → `vercel.json` を `*/5 * * * *` に戻すだけ（最も正確）。
+  2. **外部pinger**（GitHub Actions / cron-job.org 等）で `GET https://snsagent-orcin.vercel.app/api/cron/publish?secret=<CRON_SECRET>` を5分毎に叩く（無料。GitHub Actionsは遅延5〜15分あり）。
+  3. 暫定のまま日次運用（03:00にまとめて投稿）。
+- cron が投稿するには**保存済みIGトークンが必要**＝オーナーが一度 `/settings` から再ログイン（callbackが暗号化トークンを保存）すること。**現状の保存トークンは未生成のはず**（要再ログイン）。
+
+### 検証済み（本番）
+- `GET/POST/PATCH/DELETE /api/schedule` のBlob台帳CRUD（上書き反映含む）→OK。
+- `/api/cron/publish` は無認証401・`?secret=`認証で実行（authorized path はトークン未保存のため "トークン無し" を返す想定）。
+- create→ストーリー編集→予約→calendar 表示（前セッションPlaywright）。
+
+### 次の一手
+1. 実行頻度の確定（上記1/2/3）。Pro なら `*/5` に戻す。
+2. オーナーが `/settings` で IG 再ログイン（cron用トークン生成）。
+3. DM表示（§7A）/ GBP allowlisting（§10残2）。
+4. 多テナント化フェーズで Blob簡易DB → Neon/Postgres 移行。
