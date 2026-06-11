@@ -29,6 +29,7 @@ interface AppContextValue extends AppState {
   setCompany: (patch: Partial<Company>) => void;
   setCredentials: (patch: Partial<Credentials>) => void;
   addAsset: (a: Asset) => void;
+  updateAsset: (id: string, patch: Partial<Asset>) => void;
   addSchedule: (s: PostSchedule) => void;
   updateSchedule: (id: string, patch: Partial<PostSchedule>) => void;
   removeSchedule: (id: string) => void;
@@ -140,6 +141,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
       })),
     addAsset: (a) => setState((s) => ({ ...s, assets: [a, ...s.assets] })),
+    updateAsset: (id, patch) =>
+      setState((s) => ({
+        ...s,
+        assets: s.assets.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      })),
     addSchedule: (sc) =>
       setState((s) => ({ ...s, schedules: [...s.schedules, sc] })),
     updateSchedule: (id, patch) =>

@@ -10,36 +10,82 @@
 //   2) Japanese text renders with the device's own fonts (no server-side
 //      font bundling, which is fragile on serverless).
 //
-// Output is a 1080x1920 (9:16) JPEG data URL — Instagram's Story canvas.
+// The photo now FILLS the 9:16 frame edge-to-edge (cover) — no letterbox
+// bars, no "split" look. Each text layer is positioned freely (normalized
+// x/y) and sized independently, matching the drag-and-resize editor in the
+// composer. Output is a 1080x1920 (9:16) JPEG data URL.
 
-export type StoryTextPos = "top" | "center" | "bottom";
+import type { StoryElement, StoryElementId } from "./types";
 
-export interface ComposeStoryOpts {
-  /** Source photo (data URL or same-origin/CORS-enabled URL). */
-  photo: string;
+export type { StoryElement, StoryElementId };
+
+// Instagram Story canvas.
+export const STORY_CANVAS = { W: 1080, H: 1920 } as const;
+const { W, H } = STORY_CANVAS;
+const PANEL_PAD = 26; // padding of the legibility panel around each layer
+
+export const STORY_FONT_FAMILY =
+  '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
+
+// Per-layer font weight + default size (as a fraction of canvas height).
+export const STORY_ELEMENT_META: Record<
+  StoryElementId,
+  { weight: number; size: number; label: string }
+> = {
+  title: { weight: 800, size: 0.054, label: "見出し" },
+  subtitle: { weight: 600, size: 0.034, label: "サブ" },
+  caption: { weight: 500, size: 0.024, label: "キャプション" },
+  hashtags: { weight: 600, size: 0.022, label: "ハッシュタグ" },
+};
+
+/** Build the default set of Story layers from the editable text fields. */
+export function defaultStoryElements(opts: {
   title?: string;
   subtitle?: string;
-  /** Long-form caption (optional — burned below the headline). */
   caption?: string;
-  /** Hashtags (optional — burned as a single wrapped line group). */
   hashtags?: string[];
-  /** Vertical placement of the whole text block within the safe area. */
-  position?: StoryTextPos;
-  /** Text color (hex). The legibility panel/shadow adapt for contrast. */
-  textColor?: string;
+  color?: string;
+}): StoryElement[] {
+  const color = opts.color ?? "#ffffff";
+  return [
+    {
+      id: "title",
+      text: opts.title ?? "",
+      x: 0.5,
+      y: 0.6,
+      size: STORY_ELEMENT_META.title.size,
+      color,
+      enabled: !!opts.title?.trim(),
+    },
+    {
+      id: "subtitle",
+      text: opts.subtitle ?? "",
+      x: 0.5,
+      y: 0.69,
+      size: STORY_ELEMENT_META.subtitle.size,
+      color,
+      enabled: !!opts.subtitle?.trim(),
+    },
+    {
+      id: "caption",
+      text: opts.caption ?? "",
+      x: 0.5,
+      y: 0.8,
+      size: STORY_ELEMENT_META.caption.size,
+      color,
+      enabled: false,
+    },
+    {
+      id: "hashtags",
+      text: (opts.hashtags ?? []).join(" "),
+      x: 0.5,
+      y: 0.9,
+      size: STORY_ELEMENT_META.hashtags.size,
+      color,
+      enabled: false,
+    },
+  ];
 }
-
-// Instagram Story canvas + the UI-reserved "safe zones" (top profile row /
-// bottom reply bar). Keep text out of these so it isn't covered.
-const W = 1080;
-const H = 1920;
-const SAFE_TOP = 250;
-const SAFE_BOTTOM = 250;
-const PAD = 90; // horizontal text inset
-const PANEL_PAD = 34; // padding of the legibility panel around the text
-const SEG_GAP = 20; // vertical gap between title / subtitle / caption / tags
-const FONT_FAMILY =
-  '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -56,23 +102,9 @@ function drawCover(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   w: number,
-  h: number,
-  boost = 1
-) {
-  const s = Math.max(w / img.width, h / img.height) * boost;
-  const dw = img.width * s;
-  const dh = img.height * s;
-  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-}
-
-/** Draw an image so it fully fits inside w×h (letterboxed), centered. */
-function drawContain(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  w: number,
   h: number
 ) {
-  const s = Math.min(w / img.width, h / img.height);
+  const s = Math.max(w / img.width, h / img.height);
   const dw = img.width * s;
   const dh = img.height * s;
   ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
@@ -99,53 +131,6 @@ function wrapText(
     lines.push(line);
   }
   return lines;
-}
-
-/** Shrink the font until the text fits maxLines, then clamp + ellipsize. */
-function layoutText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  weight: number,
-  maxWidth: number,
-  startSize: number,
-  minSize: number,
-  maxLines: number
-): { size: number; lines: string[] } {
-  let size = startSize;
-  let lines: string[] = [];
-  while (size >= minSize) {
-    ctx.font = `${weight} ${size}px ${FONT_FAMILY}`;
-    lines = wrapText(ctx, text, maxWidth);
-    if (lines.length <= maxLines) break;
-    size -= 3;
-  }
-  if (lines.length > maxLines) {
-    lines = lines.slice(0, maxLines);
-    const last = lines[maxLines - 1];
-    lines[maxLines - 1] = last.length > 1 ? last.slice(0, -1) + "…" : "…";
-  }
-  return { size, lines };
-}
-
-interface Segment {
-  lines: string[];
-  size: number;
-  weight: number;
-  lh: number; // line height
-}
-
-function makeSegment(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  weight: number,
-  maxWidth: number,
-  startSize: number,
-  minSize: number,
-  maxLines: number,
-  lhFactor: number
-): Segment {
-  const { size, lines } = layoutText(ctx, text, weight, maxWidth, startSize, minSize, maxLines);
-  return { lines, size, weight, lh: size * lhFactor };
 }
 
 function roundRectPath(
@@ -180,20 +165,23 @@ function luminance(hex: string): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
+export interface ComposeStoryOpts {
+  /** Source photo (data URL or same-origin/CORS-enabled URL). */
+  photo: string;
+  /** Free-positioned text layers. */
+  elements: StoryElement[];
+  /** Optional: output longest side cap (used for small calendar thumbnails). */
+  maxDim?: number;
+  quality?: number;
+}
+
 /**
- * Compose a 1080x1920 Instagram Story image with the photo and burned-in
- * text. Returns a JPEG data URL ready to hand to /api/upload.
+ * Compose a 1080x1920 Instagram Story image: the photo fills the frame
+ * (cover) and every enabled text layer is burned in at its own position
+ * and size. Returns a JPEG data URL ready to hand to /api/upload.
  */
 export async function composeStoryImage(opts: ComposeStoryOpts): Promise<string> {
-  const {
-    photo,
-    title = "",
-    subtitle = "",
-    caption = "",
-    hashtags = [],
-    position = "bottom",
-    textColor = "#ffffff",
-  } = opts;
+  const { photo, elements, maxDim, quality = 0.92 } = opts;
   const img = await loadImage(photo);
 
   const canvas = document.createElement("canvas");
@@ -202,76 +190,69 @@ export async function composeStoryImage(opts: ComposeStoryOpts): Promise<string>
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvasを初期化できませんでした");
 
-  // 1) Background: a blurred, darkened cover of the photo fills the frame
-  //    edge-to-edge (no letterbox bars), looks native to Stories.
-  ctx.save();
-  ctx.filter = "blur(36px) brightness(0.5)";
-  drawCover(ctx, img, W, H, 1.12);
-  ctx.restore();
+  // 1) Photo fills the whole frame edge-to-edge (no bars / no split look).
+  drawCover(ctx, img, W, H);
 
-  // 2) Foreground: the full photo, contained so nothing important is cropped.
-  drawContain(ctx, img, W, H);
+  // 2) Each enabled text layer, burned in at its normalized position/size.
+  const maxTextW = W * 0.86;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
 
-  // 3) Text block (burned in). Each part is optional.
-  const maxTextW = W - PAD * 2;
-  const tagsText = hashtags.filter(Boolean).join(" ").trim();
-  const segs: Segment[] = [];
-  if (title.trim()) segs.push(makeSegment(ctx, title.trim(), 800, maxTextW, 78, 46, 4, 1.2));
-  if (subtitle.trim()) segs.push(makeSegment(ctx, subtitle.trim(), 600, maxTextW, 44, 30, 3, 1.28));
-  if (caption.trim()) segs.push(makeSegment(ctx, caption.trim(), 500, maxTextW, 34, 24, 6, 1.34));
-  if (tagsText) segs.push(makeSegment(ctx, tagsText, 600, maxTextW, 30, 22, 3, 1.3));
+  for (const el of elements) {
+    const text = el.text?.trim();
+    if (!el.enabled || !text) continue;
 
-  if (segs.length) {
-    const blockH =
-      segs.reduce((sum, s) => sum + s.lines.length * s.lh, 0) + SEG_GAP * (segs.length - 1);
+    const meta = STORY_ELEMENT_META[el.id];
+    const fontPx = Math.max(16, el.size * H);
+    const lh = fontPx * 1.25;
+    ctx.font = `${meta.weight} ${fontPx}px ${STORY_FONT_FAMILY}`;
+    const lines = wrapText(ctx, text, maxTextW);
 
-    // widest line across all segments → panel width
-    let maxLineW = 0;
-    for (const s of segs) {
-      ctx.font = `${s.weight} ${s.size}px ${FONT_FAMILY}`;
-      for (const l of s.lines) maxLineW = Math.max(maxLineW, ctx.measureText(l).width);
-    }
+    let lineW = 0;
+    for (const l of lines) lineW = Math.max(lineW, ctx.measureText(l).width);
+    const blockH = lines.length * lh;
 
-    let blockTop: number;
-    if (position === "top") blockTop = SAFE_TOP + 24;
-    else if (position === "center") blockTop = (H - blockH) / 2;
-    else blockTop = H - SAFE_BOTTOM - blockH - 8;
-    // keep inside the safe area even if the block is tall
-    blockTop = Math.max(SAFE_TOP + 24, Math.min(blockTop, H - SAFE_BOTTOM - blockH - 8));
+    const cx = el.x * W;
+    const cy = el.y * H;
+    const top = cy - blockH / 2;
 
     // legibility panel — dark behind light text, light behind dark text
-    const lightText = luminance(textColor) > 0.55;
-    const panelW = Math.min(maxLineW + PANEL_PAD * 2, W - 56);
-    const panelX = (W - panelW) / 2;
-    const panelY = blockTop - PANEL_PAD;
-    const panelH = blockH + PANEL_PAD * 2;
-    ctx.fillStyle = lightText ? "rgba(0,0,0,0.36)" : "rgba(255,255,255,0.46)";
-    roundRectPath(ctx, panelX, panelY, panelW, panelH, 30);
+    const lightText = luminance(el.color) > 0.55;
+    const panelW = Math.min(lineW + PANEL_PAD * 2, W - 24);
+    const panelH = blockH + PANEL_PAD * 1.4;
+    const panelX = Math.min(Math.max(cx - panelW / 2, 12), W - panelW - 12);
+    const panelY = top - PANEL_PAD * 0.7;
+    ctx.fillStyle = lightText ? "rgba(0,0,0,0.34)" : "rgba(255,255,255,0.42)";
+    roundRectPath(ctx, panelX, panelY, panelW, panelH, 24);
     ctx.fill();
 
     // text
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = textColor;
+    ctx.fillStyle = el.color;
     ctx.shadowColor = lightText ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.18)";
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 2;
-
-    let y = blockTop;
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      ctx.font = `${s.weight} ${s.size}px ${FONT_FAMILY}`;
-      for (const line of s.lines) {
-        ctx.fillText(line, W / 2, y);
-        y += s.lh;
-      }
-      if (i < segs.length - 1) y += SEG_GAP;
+    let y = top;
+    for (const line of lines) {
+      ctx.fillText(line, cx, y);
+      y += lh;
     }
-
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
   }
 
-  return canvas.toDataURL("image/jpeg", 0.92);
+  // Optional downscale for lightweight thumbnails.
+  if (maxDim && maxDim < W) {
+    const scale = maxDim / H; // H is the longest side (9:16)
+    const out = document.createElement("canvas");
+    out.width = Math.round(W * scale);
+    out.height = Math.round(H * scale);
+    const octx = out.getContext("2d");
+    if (octx) {
+      octx.drawImage(canvas, 0, 0, out.width, out.height);
+      return out.toDataURL("image/jpeg", quality);
+    }
+  }
+
+  return canvas.toDataURL("image/jpeg", quality);
 }

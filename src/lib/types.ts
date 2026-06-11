@@ -4,6 +4,21 @@
 
 export type Channel = "instagram" | "gbp";
 export type PostFormat = "feed" | "reel" | "story" | "gbp_update";
+
+/** A single burned-in Story text layer (title / subtitle / caption / tags). */
+export type StoryElementId = "title" | "subtitle" | "caption" | "hashtags";
+
+export interface StoryElement {
+  id: StoryElementId;
+  text: string;
+  /** Normalized center position within the 9:16 canvas (0..1). */
+  x: number;
+  y: number;
+  /** Font size as a fraction of canvas height (e.g. 0.05 ≈ 96px on 1920). */
+  size: number;
+  color: string;
+  enabled: boolean;
+}
 export type ScheduleStatus = "scheduled" | "published" | "paused" | "skipped" | "draft";
 export type AIToneId = "friendly" | "polite" | "energetic" | "calm" | "luxury";
 
@@ -48,6 +63,16 @@ export interface Asset {
   emoji: string;
   templateId: string;
   createdAt: string;
+  // --- composer payload (so the post can be previewed / re-edited later) ---
+  subtitle?: string;
+  /** Which format this asset was built for (drives the calendar preview). */
+  format?: PostFormat;
+  /** Downscaled source photo (data URL) — kept light for localStorage. */
+  photo?: string;
+  /** Downscaled rendered preview (data URL) shown on the calendar. */
+  previewImage?: string;
+  /** Free-positioned Story text layers (only for format === "story"). */
+  storyElements?: StoryElement[];
 }
 
 export type Recurrence = "none" | "weekly" | "monthly";
