@@ -1,0 +1,34 @@
+name: Auto-publish scheduled posts
+
+# Hobbyプランの Vercel Cron は日次1回までのため、予約時刻どおり（分単位）に
+# 投稿するための外部トリガー。5分毎に Lumina の cron エンドポイントを叩く。
+# 認証は GitHub の Secret `CRON_SECRET`（= Vercel の CRON_SECRET と同値）。
+#
+# ⚠️ GitHub Actions のスケジュールは UTC かつ高負荷時に5〜15分遅延することがある。
+#    正確さを最優先するなら Vercel Pro + vercel.json を */5 に戻す方式を推奨。
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # 手動実行も可
+
+# 直近の実行が走っていてもスキップせず最新だけ走らせる
+concurrency:
+  group: lumina-auto-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Lumina publish cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Secret CRON_SECRET が未設定です。GitHubのSettings→Secrets→Actionsで登録してください。"
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://snsagent-orcin.vercel.app/api/cron/publish
