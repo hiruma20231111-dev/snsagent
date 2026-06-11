@@ -550,6 +550,7 @@ function GbpConnect() {
   >("idle");
   const [locError, setLocError] = useState<string | null>(null);
   const [manualId, setManualId] = useState(cred.gbpLocationId ?? "");
+  const [placesInput, setPlacesInput] = useState(cred.placesKey ?? "");
   const selected = cred.gbpLocationId;
 
   useEffect(() => {
@@ -743,6 +744,48 @@ function GbpConnect() {
           </div>
         </div>
       )}
+
+      {/* Places API key — used by キーワード順位（MEO）計測 */}
+      <div className="border-t border-white/8 pt-4">
+        <p className="mb-2 text-[11px] font-bold text-[var(--fg-dim)]">
+          キーワード順位（MEO）計測用：Google Places APIキー
+        </p>
+        <div className="glass px-4 py-3">
+          <p className="mb-1.5 text-[10px] leading-relaxed text-[var(--fg-faint)]">
+            「順位」メニューでGoogleマップの検索順位を計測するのに使います。Google Cloudで「Places API」を有効化し（課金が必要）、APIキーをここに保存してください。
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={placesInput}
+              onChange={(e) => setPlacesInput(e.target.value)}
+              placeholder="AIza... から始まるキー"
+              autoComplete="off"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--fg-faint)]/60"
+            />
+            <button
+              onClick={() => {
+                setCredentials({ placesKey: placesInput.trim() });
+                showToast(placesInput.trim() ? "Places APIキーを保存しました" : "保存しました");
+              }}
+              className="shrink-0 rounded-xl bg-white/8 px-3 py-1.5 text-[11px] font-semibold"
+            >
+              保存
+            </button>
+          </div>
+          {cred.placesKey && (
+            <p className="mt-1.5 text-[10px] text-[var(--ok)]">✓ 保存済み（順位計測が有効）</p>
+          )}
+          <a
+            href="https://console.cloud.google.com/apis/library/places-backend.googleapis.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[var(--brand-2)]"
+          >
+            <ExternalLink size={11} /> Places API を有効化
+          </a>
+        </div>
+      </div>
 
       {/* Google Cloud OAuth client setup helper */}
       <div className="rounded-2xl border border-white/10 bg-white/5 p-3">

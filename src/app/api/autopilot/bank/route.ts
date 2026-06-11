@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     caption: b.caption ?? "",
     hashtags: Array.isArray(b.hashtags) ? b.hashtags : [],
     title: b.title,
+    format: b.format ?? "feed",
     used: false,
     createdAt: new Date().toISOString(),
   };

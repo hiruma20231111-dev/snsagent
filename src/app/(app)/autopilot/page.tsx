@@ -13,9 +13,12 @@ import {
   Loader2,
 } from "lucide-react";
 import { Page, Button, Chip, Toggle } from "@/components/ui";
+import { Instagram } from "@/components/icons";
+import { MapPin } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { BAND_LABEL, defaultAutopilotConfig } from "@/lib/persona";
-import type { AutopilotConfig, AIToneId, BankItem, TimeBand } from "@/lib/types";
+import { composeStoryImage, defaultStoryElements } from "@/lib/story-image";
+import type { AutopilotConfig, AIToneId, BankItem, PostFormat, TimeBand } from "@/lib/types";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 const TONES: { id: AIToneId; label: string }[] = [
@@ -133,15 +136,7 @@ export default function AutopilotPage() {
       setUploadMsg(`${i + 1}/${list.length} 枚目をAIが仕上げています…`);
       try {
         const dataUrl = await readAsDataURL(file);
-        const up = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ dataUrl }),
-        }).then((r) => r.json());
-        if (!up.ok) {
-          showToast(up.error ?? "画像アップロードに失敗しました");
-          continue;
-        }
+        // 1) AI writes persona-tuned copy from the photo
         const [meta, b64] = dataUrl.split(",");
         const mimeType = /data:(.*?);/.exec(meta)?.[1] ?? "image/jpeg";
         const hint = `次のターゲットに刺さる投稿にしてください: ${cfg.persona.label}（${cfg.persona.audience} / ${cfg.persona.lifestyle}）`;
@@ -158,6 +153,32 @@ export default function AutopilotPage() {
           }),
         }).then((r) => r.json());
         const r = ai.result ?? {};
+
+        // 2) For Stories, burn the copy into a 9:16 image now (WYSIWYG); for
+        //    feed, keep the raw photo. Then upload the final image to Blob.
+        let finalImage = dataUrl;
+        if (cfg.format === "story") {
+          finalImage = await composeStoryImage({
+            photo: dataUrl,
+            elements: defaultStoryElements({
+              title: r.title ?? "",
+              subtitle: r.subtitle ?? "",
+              caption: r.caption ?? "",
+              hashtags: r.hashtags ?? [],
+            }),
+          });
+        }
+        const up = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ dataUrl: finalImage }),
+        }).then((res) => res.json());
+        if (!up.ok) {
+          showToast(up.error ?? "画像アップロードに失敗しました");
+          continue;
+        }
+
+        // 3) store the ready-to-post draft in the bank
         const saved = await fetch("/api/autopilot/bank", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -166,6 +187,7 @@ export default function AutopilotPage() {
             caption: r.caption ?? "",
             hashtags: r.hashtags ?? [],
             title: r.title ?? "",
+            format: cfg.format,
           }),
         }).then((res) => res.json());
         if (saved.item) setBank((prev) => [...prev, saved.item]);
@@ -258,9 +280,42 @@ export default function AutopilotPage() {
             </div>
           </div>
 
+          {/* destination + format */}
+          <div className="glass space-y-3 p-4">
+            <p className="text-sm font-bold">② 投稿先と形式</p>
+            <div className="flex gap-2">
+              <div
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-bold text-white"
+                style={{ background: "var(--grad-brand)" }}
+              >
+                <Instagram size={15} /> Instagram
+              </div>
+              <div className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-2.5 text-sm font-bold text-[var(--fg-faint)]">
+                <MapPin size={15} /> GBP（承認待ち）
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold text-[var(--fg-faint)]">形式</p>
+              <div className="flex gap-2">
+                {(["story", "feed"] as PostFormat[]).map((f) => (
+                  <FormatCard
+                    key={f}
+                    active={cfg.format === f}
+                    onClick={() => patch({ format: f })}
+                    label={f === "story" ? "ストーリーズ" : "フィード"}
+                    sub={f === "story" ? "9:16・文字を焼き込み" : "1:1・キャプション付き"}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] text-[var(--fg-faint)]">
+                ※ 形式は写真を追加する前に選んでください（追加時にAIが形式に合わせて仕上げます）。
+              </p>
+            </div>
+          </div>
+
           {/* cadence */}
           <div className="glass space-y-4 p-4">
-            <p className="text-sm font-bold">② 頻度と時間帯</p>
+            <p className="text-sm font-bold">③ 頻度と時間帯</p>
 
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-semibold text-[var(--fg-dim)]">週の投稿数</span>
@@ -327,7 +382,7 @@ export default function AutopilotPage() {
           {/* photo bank */}
           <div className="glass p-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-bold">③ 写真バンク</p>
+              <p className="text-sm font-bold">④ 写真バンク</p>
               <span className="text-[11px] text-[var(--fg-faint)]">未使用 {unused}枚</span>
             </div>
             <input
@@ -464,6 +519,32 @@ function LabeledInput({
         />
       )}
     </div>
+  );
+}
+
+function FormatCard({
+  active,
+  onClick,
+  label,
+  sub,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  sub: string;
+}) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={onClick}
+      className={`flex flex-1 flex-col items-start gap-0.5 rounded-2xl border px-3.5 py-2.5 text-left transition-colors ${
+        active ? "border-transparent text-white" : "border-white/10 bg-white/5 text-[var(--fg-dim)]"
+      }`}
+      style={active ? { background: "var(--grad-brand-soft)", borderColor: "var(--brand-3)" } : undefined}
+    >
+      <span className="text-sm font-bold">{label}</span>
+      <span className="text-[10px] text-[var(--fg-faint)]">{sub}</span>
+    </motion.button>
   );
 }
 

@@ -66,6 +66,7 @@ export function defaultAutopilotConfig(): AutopilotConfig {
     preferredDays: [1, 3, 5], // Mon / Wed / Fri
     timeBand: "auto",
     channels: ["instagram"],
+    format: "story", // Instagram Stories by default
     lookaheadDays: 10,
     updatedAt: new Date().toISOString(),
   };

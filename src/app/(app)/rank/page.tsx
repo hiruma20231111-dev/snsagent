@@ -19,8 +19,10 @@ import type { RankConfig, RankKeyword } from "@/lib/types";
 
 export default function RankPage() {
   const { company, showToast } = useApp();
+  const placesKey = company.credentials?.placesKey?.trim() || "";
 
-  const [hasKey, setHasKey] = useState(true);
+  const [serverHasKey, setServerHasKey] = useState(false);
+  const hasKey = serverHasKey || !!placesKey;
   const [cfg, setCfg] = useState<RankConfig | null>(null);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -37,7 +39,7 @@ export default function RankPage() {
           fetch("/api/rank/config").then((r) => r.json()),
           fetch("/api/rank/keywords").then((r) => r.json()),
         ]);
-        setHasKey(!!c.hasKey);
+        setServerHasKey(!!c.hasKey);
         if (c.config) {
           setCfg(c.config);
           setName(c.config.businessName ?? "");
@@ -61,7 +63,7 @@ export default function RankPage() {
       const r = await fetch("/api/rank/config", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ businessName: name, address }),
+        body: JSON.stringify({ businessName: name, address, apiKey: placesKey }),
       }).then((res) => res.json());
       if (r.ok) {
         setCfg(r.config);
@@ -104,13 +106,16 @@ export default function RankPage() {
     }
     setChecking(true);
     try {
-      const r = await fetch("/api/rank/check", { method: "POST" }).then((res) => res.json());
+      const r = await fetch("/api/rank/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: placesKey }),
+      }).then((res) => res.json());
       if (r.ok) {
         const k = await fetch("/api/rank/keywords").then((res) => res.json());
         if (k.keywords) setKeywords(k.keywords);
         showToast("順位を計測しました📊");
       } else {
-        if (r.needsKey) setHasKey(false);
         showToast(r.error ?? "計測に失敗しました");
       }
     } finally {
@@ -141,7 +146,7 @@ export default function RankPage() {
           <div className="text-[12px] leading-relaxed">
             <p className="font-bold">計測にはGoogle Places APIキーが必要です</p>
             <p className="mt-0.5 text-[var(--fg-dim)]">
-              Google Cloudで「Places API」を有効化し、環境変数 <code>GOOGLE_PLACES_API_KEY</code> を設定すると計測が有効になります。設定までは店舗名・キーワードの登録だけ可能です。
+              Google Cloudで「Places API」を有効化し、<strong>設定 → GBP連携</strong> の「Places APIキー」欄にキーを保存すると計測が有効になります。設定までは店舗名・キーワードの登録だけ可能です。
             </p>
           </div>
         </div>

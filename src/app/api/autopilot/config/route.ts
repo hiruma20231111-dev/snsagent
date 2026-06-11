@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     preferredDays: Array.isArray(body.preferredDays) ? body.preferredDays : base.preferredDays,
     timeBand: body.timeBand ?? base.timeBand,
     channels: body.channels ?? base.channels,
+    format: body.format ?? base.format,
     lookaheadDays: clampNum(body.lookaheadDays, 3, 30, base.lookaheadDays),
     updatedAt: new Date().toISOString(),
   };

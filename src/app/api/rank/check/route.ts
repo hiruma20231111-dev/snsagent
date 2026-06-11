@@ -12,14 +12,21 @@ export const maxDuration = 60;
 
 const HISTORY_CAP = 30;
 
-// POST /api/rank/check → measure the current rank of every keyword.
-export async function POST() {
-  if (!placesKey()) {
+// POST /api/rank/check { apiKey? } → measure the current rank of every keyword.
+export async function POST(req: Request) {
+  let body: { apiKey?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    /* ignore */
+  }
+  const key = placesKey(body.apiKey);
+  if (!key) {
     return NextResponse.json({
       ok: false,
       needsKey: true,
       error:
-        "Google Places APIキーが未設定です。Google CloudでPlaces APIを有効化し、GOOGLE_PLACES_API_KEY を設定してください。",
+        "Google Places APIキーが未設定です。設定のGBP欄にキーを保存するか、GOOGLE_PLACES_API_KEY を設定してください。",
     });
   }
 
@@ -30,7 +37,7 @@ export async function POST() {
 
   // Resolve the place once (and cache it on the config).
   if (!cfg.placeId || cfg.lat == null || cfg.lng == null) {
-    const p = await findPlace([cfg.businessName, cfg.address].filter(Boolean).join(" "));
+    const p = await findPlace([cfg.businessName, cfg.address].filter(Boolean).join(" "), body.apiKey);
     if (!p) {
       return NextResponse.json({
         ok: false,
@@ -46,7 +53,7 @@ export async function POST() {
   const results: { id: string; keyword: string; rank: number | null }[] = [];
 
   for (const kw of keywords) {
-    const r = await rankForKeyword(kw.keyword, cfg.lat!, cfg.lng!, cfg.placeId!);
+    const r = await rankForKeyword(kw.keyword, cfg.lat!, cfg.lng!, cfg.placeId!, body.apiKey);
     const point = { at: now, rank: r.rank };
     const history = [...kw.history, point].slice(-HISTORY_CAP);
     await saveRankKeyword({

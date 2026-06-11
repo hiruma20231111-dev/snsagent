@@ -49,6 +49,8 @@ export interface Credentials {
   // AI / banner
   geminiKey?: string;
   bannerbearKey?: string;
+  // Google Places API key (used by keyword rank / MEO tracking)
+  placesKey?: string;
 }
 
 /** A reusable banner + caption asset (contents table). */
@@ -152,7 +154,9 @@ export interface AutopilotConfig {
   postsPerWeek: number; // 1..14
   preferredDays: number[]; // 0=Sun..6=Sat ; empty = any day
   timeBand: TimeBand;
-  channels: Channel[]; // currently Instagram feed
+  channels: Channel[]; // currently Instagram
+  /** Post format the autopilot produces (default = Instagram Stories). */
+  format: PostFormat; // "feed" | "story"
   lookaheadDays: number; // how far ahead to keep the queue filled
   updatedAt: string;
 }
@@ -160,10 +164,12 @@ export interface AutopilotConfig {
 /** A ready-to-post draft (photo + persona-tuned copy) the autopilot draws from. */
 export interface BankItem {
   id: string;
-  imageUrl: string; // public blob URL (full image)
+  imageUrl: string; // public blob URL — for "story" this is the burned-in image
   caption: string;
   hashtags: string[];
   title?: string;
+  /** Format this draft was prepared for (image is composed accordingly). */
+  format?: PostFormat;
   used: boolean;
   createdAt: string;
 }

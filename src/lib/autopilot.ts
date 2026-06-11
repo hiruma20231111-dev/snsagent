@@ -62,12 +62,16 @@ export async function planAutopilot(): Promise<{ created: number; reason?: strin
       if (at.getTime() > now) {
         const item = bank[bi++];
         const stamp = new Date().toISOString();
+        const fmt = item.format ?? cfg.format ?? "feed";
+        // Stories ignore captions (text is burned into the image); feed carries it.
+        const caption =
+          fmt === "story" ? "" : `${item.caption}\n\n${item.hashtags.join(" ")}`.trim();
         const post: StoredPost = {
           id: "auto_" + at.getTime() + "_" + Math.random().toString(36).slice(2, 7),
           imageUrl: item.imageUrl,
-          caption: `${item.caption}\n\n${item.hashtags.join(" ")}`.trim(),
+          caption,
           title: item.title,
-          format: "feed",
+          format: fmt,
           channels: cfg.channels as Channel[],
           scheduledAt: at.toISOString(),
           status: "scheduled",

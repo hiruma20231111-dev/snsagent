@@ -10,8 +10,13 @@
 
 const PLACES = "https://maps.googleapis.com/maps/api/place";
 
-export function placesKey(): string {
-  return process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+export function placesKey(override?: string): string {
+  return (
+    (override && override.trim()) ||
+    process.env.GOOGLE_PLACES_API_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY ||
+    ""
+  );
 }
 
 export interface ResolvedPlace {
@@ -22,8 +27,8 @@ export interface ResolvedPlace {
 }
 
 /** Resolve a business to a place_id + coordinates from a name (+address). */
-export async function findPlace(query: string): Promise<ResolvedPlace | null> {
-  const key = placesKey();
+export async function findPlace(query: string, keyOverride?: string): Promise<ResolvedPlace | null> {
+  const key = placesKey(keyOverride);
   if (!key || !query.trim()) return null;
   const url =
     `${PLACES}/findplacefromtext/json?input=${encodeURIComponent(query)}` +
@@ -61,9 +66,10 @@ export async function rankForKeyword(
   lat: number,
   lng: number,
   placeId: string,
+  keyOverride?: string,
   radiusMeters = 3000
 ): Promise<RankResult> {
-  const key = placesKey();
+  const key = placesKey(keyOverride);
   if (!key) return { rank: null, total: 0, top: [] };
   const url =
     `${PLACES}/textsearch/json?query=${encodeURIComponent(keyword)}` +
