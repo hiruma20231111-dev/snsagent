@@ -201,7 +201,12 @@ export default function CreatePage() {
 
   async function schedule() {
     if (!photo) return;
+    setPublishing(true);
     const assetId = "ast_" + Date.now();
+    const schedId = "sch_" + Date.now();
+    const baseFormat: PostFormat = igSelected ? format : "feed";
+    const at = new Date(`${schedDate}T${pad(hour)}:${pad(minute)}:00`);
+
     // Lightweight copies for localStorage: a small preview + a capped source.
     const previewImage = isStory
       ? await composeStoryImage({ photo, elements: storyElements, maxDim: 540, quality: 0.8 })
@@ -219,16 +224,13 @@ export default function CreatePage() {
       emoji: ai?.emoji ?? "✨",
       templateId: "tpl_minimal",
       createdAt: new Date().toISOString(),
-      format: igSelected ? format : "feed",
+      format: baseFormat,
       photo: storedPhoto,
       previewImage,
       storyElements: isStory ? storyElements : undefined,
     });
-
-    const at = new Date(`${schedDate}T${pad(hour)}:${pad(minute)}:00`);
-    const baseFormat: PostFormat = igSelected ? format : "feed";
     addSchedule({
-      id: "sch_" + Date.now(),
+      id: schedId,
       companyId: company.id,
       assetId,
       channels,
@@ -238,8 +240,41 @@ export default function CreatePage() {
       status: "scheduled",
       postOnClosedDays: false,
     });
-    showToast("予約しました！カレンダーで確認できます📅");
-    router.push("/calendar");
+
+    // Persist to the server ledger so the cron job can publish it.
+    // The final (already-composed) image is uploaded to Blob → public URL.
+    try {
+      const finalImage = isStory ? await composeStoryImage({ photo, elements: storyElements }) : photo;
+      const up = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl: finalImage }),
+      }).then((r) => r.json());
+      if (up.ok) {
+        const fullCaption = isStory ? "" : `${caption}\n\n${hashtags.join(" ")}`.trim();
+        await fetch("/api/schedule", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: schedId,
+            imageUrl: up.url,
+            caption: fullCaption,
+            title,
+            format: baseFormat,
+            channels,
+            scheduledAt: at.toISOString(),
+          }),
+        });
+        showToast("予約しました！指定日時に自動投稿されます📅");
+      } else {
+        showToast("予約は保存しましたが自動投稿の登録に失敗しました（" + (up.error ?? "") + "）");
+      }
+    } catch {
+      showToast("予約は保存しましたが自動投稿サーバーに接続できませんでした");
+    } finally {
+      setPublishing(false);
+      router.push("/calendar");
+    }
   }
 
   return (
@@ -627,8 +662,15 @@ export default function CreatePage() {
                 )}
 
                 {publishMode === "schedule" ? (
-                  <Button onClick={schedule} className="mt-5 w-full" disabled={channels.length === 0}>
-                    <CalendarClock size={16} /> {schedDate.replaceAll("-", "/")} {pad(hour)}:{pad(minute)} に予約する
+                  <Button
+                    onClick={schedule}
+                    className="mt-5 w-full"
+                    disabled={channels.length === 0 || publishing}
+                  >
+                    <CalendarClock size={16} />{" "}
+                    {publishing
+                      ? "登録中…"
+                      : `${schedDate.replaceAll("-", "/")} ${pad(hour)}:${pad(minute)} に予約する`}
                   </Button>
                 ) : (
                   <Button

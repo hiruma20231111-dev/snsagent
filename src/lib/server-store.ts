@@ -1,0 +1,189 @@
+// ============================================================
+// server-store.ts — server-side persistence on Vercel Blob
+// ============================================================
+// The app's rich UI still uses localStorage, but anything the CRON job
+// needs to act on (scheduled posts + the IG token) is persisted here so a
+// browserless server can publish on schedule.
+//
+// • Scheduled posts live at  schedules/{id}.json  (public — the caption and
+//   image are public on Instagram anyway).
+// • The IG token is AES-256-GCM ENCRYPTED before it touches Blob, so even
+//   though Blob objects are publicly readable, the ciphertext is useless
+//   without TOKEN_ENC_KEY (kept only in the deployment env).
+//
+// NOTE: this is the single-tenant MVP store. For multi-tenant / higher
+// volume, migrate to Postgres (Neon) — the interfaces below are the seam.
+
+import crypto from "crypto";
+import { put, list, del } from "@vercel/blob";
+import type { Channel, PostFormat } from "./types";
+
+const POSTS_PREFIX = "schedules/";
+const TOKEN_KEY = "auth/ig-token.json";
+
+export type StoredPostStatus =
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "failed"
+  | "skipped"
+  | "paused";
+
+export interface StoredPost {
+  id: string;
+  imageUrl: string; // public blob URL of the final (already-composed) image
+  caption: string; // full caption incl. hashtags (used for feed posts)
+  title?: string;
+  format: PostFormat; // feed | story | reel
+  channels: Channel[];
+  scheduledAt: string; // ISO datetime
+  status: StoredPostStatus;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+  igMediaId?: string;
+}
+
+// ---------- low-level blob json helpers ----------
+
+async function putJson(pathname: string, data: unknown): Promise<string> {
+  const blob = await put(pathname, JSON.stringify(data), {
+    access: "public",
+    contentType: "application/json",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 0, // overwrites must be visible immediately
+  });
+  return blob.url;
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    // cache-buster: blob CDN would otherwise serve a stale copy after overwrite
+    const res = await fetch(`${url}?_cb=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+// ---------- scheduled posts ----------
+
+export async function savePost(p: StoredPost): Promise<void> {
+  await putJson(`${POSTS_PREFIX}${p.id}.json`, p);
+}
+
+export async function listPosts(): Promise<StoredPost[]> {
+  const { blobs } = await list({ prefix: POSTS_PREFIX });
+  const items = await Promise.all(blobs.map((b) => fetchJson<StoredPost>(b.url)));
+  return items.filter((x): x is StoredPost => !!x);
+}
+
+export async function getPost(id: string): Promise<StoredPost | null> {
+  const { blobs } = await list({ prefix: `${POSTS_PREFIX}${id}.json` });
+  if (!blobs.length) return null;
+  return fetchJson<StoredPost>(blobs[0].url);
+}
+
+export async function updatePost(
+  id: string,
+  patch: Partial<StoredPost>
+): Promise<StoredPost | null> {
+  const cur = await getPost(id);
+  if (!cur) return null;
+  const next = { ...cur, ...patch, updatedAt: new Date().toISOString() };
+  await savePost(next);
+  return next;
+}
+
+export async function deletePost(id: string): Promise<void> {
+  const { blobs } = await list({ prefix: `${POSTS_PREFIX}${id}.json` });
+  await Promise.all(blobs.map((b) => del(b.url)));
+}
+
+// ---------- encrypted IG token ----------
+
+export interface IgToken {
+  accessToken: string;
+  userId?: string;
+  username?: string;
+  /** ISO datetime when the long-lived token expires. */
+  expiresAt?: string;
+  updatedAt: string;
+}
+
+interface Envelope {
+  v: 1;
+  iv: string; // base64
+  tag: string; // base64
+  data: string; // base64 ciphertext
+}
+
+function encKey(): Buffer | null {
+  const raw = process.env.TOKEN_ENC_KEY;
+  if (!raw) return null;
+  // accept base64 (preferred, 32 bytes) or hex/utf8 fallback
+  let key = Buffer.from(raw, "base64");
+  if (key.length !== 32) key = crypto.createHash("sha256").update(raw).digest();
+  return key;
+}
+
+function encrypt(plain: string): Envelope | null {
+  const key = encKey();
+  if (!key) return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return {
+    v: 1,
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    data: enc.toString("base64"),
+  };
+}
+
+function decrypt(env: Envelope): string | null {
+  const key = encKey();
+  if (!key) return null;
+  try {
+    const decipher = crypto.createDecipheriv(
+      "aes-256-gcm",
+      key,
+      Buffer.from(env.iv, "base64")
+    );
+    decipher.setAuthTag(Buffer.from(env.tag, "base64"));
+    const dec = Buffer.concat([
+      decipher.update(Buffer.from(env.data, "base64")),
+      decipher.final(),
+    ]);
+    return dec.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+export function tokenStorageReady(): boolean {
+  return !!encKey() && (!!process.env.BLOB_STORE_ID || !!process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+export async function saveIgToken(t: IgToken): Promise<boolean> {
+  const env = encrypt(JSON.stringify(t));
+  if (!env) return false;
+  await putJson(TOKEN_KEY, env);
+  return true;
+}
+
+export async function getIgToken(): Promise<IgToken | null> {
+  const { blobs } = await list({ prefix: TOKEN_KEY });
+  if (!blobs.length) return null;
+  const env = await fetchJson<Envelope>(blobs[0].url);
+  if (!env) return null;
+  const plain = decrypt(env);
+  if (!plain) return null;
+  try {
+    return JSON.parse(plain) as IgToken;
+  } catch {
+    return null;
+  }
+}

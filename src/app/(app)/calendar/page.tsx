@@ -230,13 +230,14 @@ export default function CalendarPage() {
                 s={s}
                 asset={assetOf(s)}
                 onOpen={() => setEditing(s)}
-                onToggle={() =>
-                  updateSchedule(s.id, {
-                    status: s.status === "paused" ? "scheduled" : "paused",
-                  })
-                }
+                onToggle={() => {
+                  const next = s.status === "paused" ? "scheduled" : "paused";
+                  updateSchedule(s.id, { status: next });
+                  serverPatch(s.id, { status: next });
+                }}
                 onDelete={() => {
                   removeSchedule(s.id);
+                  serverDelete(s.id);
                   showToast("予約を削除しました");
                 }}
               />
@@ -298,9 +299,10 @@ export default function CalendarPage() {
         onClose={() => setEditing(null)}
         onSave={async ({ at, channels, asset }) => {
           if (!editing) return;
+          const sid = editing.id;
           const a = assetOf(editing);
           const baseFormat: PostFormat = a?.format ?? "feed";
-          updateSchedule(editing.id, {
+          updateSchedule(sid, {
             at,
             channels,
             formats: channels.includes("gbp") ? [baseFormat, "gbp_update"] : [baseFormat],
@@ -308,9 +310,37 @@ export default function CalendarPage() {
           if (a) updateAsset(a.id, asset);
           setEditing(null);
           showToast("予約を更新しました✏️");
+
+          // sync the cron ledger
+          const isStory = baseFormat === "story";
+          const serverCaption = isStory
+            ? ""
+            : `${asset.caption ?? ""}\n\n${(asset.hashtags ?? []).join(" ")}`.trim();
+          const body: Record<string, unknown> = {
+            scheduledAt: at,
+            channels,
+            title: asset.title,
+            caption: serverCaption,
+          };
+          // For Stories, re-burn + re-upload so the auto-post reflects edits.
+          if (isStory && a?.photo && asset.storyElements) {
+            try {
+              const full = await composeStoryImage({ photo: a.photo, elements: asset.storyElements });
+              const up = await fetch("/api/upload", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ dataUrl: full }),
+              }).then((r) => r.json());
+              if (up.ok) body.imageUrl = up.url;
+            } catch {
+              /* keep existing server image */
+            }
+          }
+          serverPatch(sid, body);
         }}
         onDelete={() => {
           if (!editing) return;
+          serverDelete(editing.id);
           removeSchedule(editing.id);
           setEditing(null);
           showToast("予約を削除しました");
@@ -965,4 +995,16 @@ function pad(n: number) {
 }
 function isoDate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// ---- server ledger sync (best-effort; UI keeps working if offline) ----
+function serverPatch(id: string, body: Record<string, unknown>) {
+  fetch(`/api/schedule/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+function serverDelete(id: string) {
+  fetch(`/api/schedule/${id}`, { method: "DELETE" }).catch(() => {});
 }

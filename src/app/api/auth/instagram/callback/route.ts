@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { saveIgToken } from "@/lib/server-store";
+import { resolveIgUserId } from "@/lib/instagram";
+
+// Node runtime: token encryption (server-store) uses node:crypto.
+export const runtime = "nodejs";
 
 // GET /api/auth/instagram/callback?code=...&state=...
 // "Instagram API with Instagram Login" token exchange.
@@ -61,8 +66,24 @@ export async function GET(req: Request) {
         `&client_secret=${appSecret}&access_token=${short.access_token}`,
       { cache: "no-store" }
     );
-    const long = (await longRes.json()) as { access_token?: string };
+    const long = (await longRes.json()) as { access_token?: string; expires_in?: number };
     const token = long.access_token ?? short.access_token;
+    const expiresIn = long.expires_in ?? 60 * 60 * 24 * 60; // ~60d default
+
+    // Persist the token (encrypted) so the cron job can publish without a
+    // browser session. Best-effort: never block the login redirect on it.
+    try {
+      const userId =
+        short.user_id != null ? String(short.user_id) : (await resolveIgUserId(token)) ?? undefined;
+      await saveIgToken({
+        accessToken: token,
+        userId,
+        expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      /* token DB optional — cookie still works for interactive use */
+    }
 
     const res = NextResponse.redirect(`${settings}?ig=connected`);
     res.cookies.set("ig_user_token", token, {
