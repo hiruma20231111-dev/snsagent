@@ -212,3 +212,24 @@
 2. オーナーが `/settings` で IG 再ログイン（cron用トークン生成）。
 3. DM表示（§7A）/ GBP allowlisting（§10残2）。
 4. 多テナント化フェーズで Blob簡易DB → Neon/Postgres 移行。
+
+---
+
+## 12. 2026-06-11 セッション追記③（ナビ刷新＋おまかせ自動投稿v2）
+
+### A) ナビをトップタブ化 — commit `bda05c3`
+- `SideNav`/`BottomNav` を撤去し、**アプリ上部のジャンル別タブ `TopNav`**（横スクロール）に統一。`(app)/layout.tsx` は
+  `AppHeader`＋`TopNav` を sticky で上部固定、本文は `max-w-[1100px]` センタリング。`AppHeader` は全画面表示に変更。
+- タブ: ホーム / 投稿をつくる / **おまかせ** / 予約 / 受信 / 設定。（旧 BottomNav.tsx・SideNav.tsx はファイル残置・未使用）
+
+### B) ペルソナ駆動「おまかせ自動投稿」v2 — commit `bda05c3`
+- **コンセプト**: ペルソナ＋頻度を設定し写真をまとめて入れると、各写真にAIがペルソナ向け文面を生成して「写真バンク」に蓄積→
+  プランナーがペルソナ由来の時間帯で予約を自動補充→既存cronで自動投稿。
+- **AIはクライアント側**（オーナーのGeminiキーで `/api/ai/analyze`）で写真ごとに生成→bank登録。サーバーにAIキー不要。
+- データ（server-store/Blob）: `autopilot/config.json`（設定）, `bank/{id}.json`（ready下書き, used フラグ）, 予約は既存 `schedules/{id}.json` に `source:"autopilot"`。
+- 時間ロジック `src/lib/persona.ts`: ペルソナのlifestyle/audienceから時間帯(lunch/morning/night/evening/afternoon)を推定（`auto`）or 明示band。jitter付き。
+- プランナー `src/lib/autopilot.ts` `planAutopilot()`: 直近 `lookaheadDays` に `postsPerWeek` 密度で予約が並ぶよう不足分をbank(未使用)から補充。**1日1件・preferredDaysのみ**。`/api/cron/publish` 冒頭で毎回実行。
+- API: `GET/POST /api/autopilot/config`、`GET/POST/DELETE /api/autopilot/bank`、`POST /api/autopilot/plan`（即時反映用・無認証＝自分のbank/configからの予約のみで低リスク）。
+- 画面 `(app)/autopilot/page.tsx`: ON/OFF・ペルソナ・頻度(週N/曜日/時間帯)・写真バンク(一括アップ→AI生成)・自動予約キュー表示。
+- **制約/前提**: 対象は当面 **Instagramフィード**（ストーリー焼き込みはクライアントCanvasのためサーバー自動化は別途）。GBPは承認待ちでskip。実投稿には §11 の IG再ログイン（トークン保存）が必要。
+- 本番E2E検証OK: config保存→bank追加→plan(created:1, 夕方帯/指定曜日に配置)→schedule反映→cleanup。
