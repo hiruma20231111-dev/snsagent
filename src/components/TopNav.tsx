@@ -10,6 +10,7 @@ import {
   Settings,
   Plus,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 
 // Genre-based menus, shown as horizontally-scrollable tabs at the TOP of the
@@ -20,6 +21,7 @@ const items = [
   { href: "/create", label: "投稿をつくる", icon: Plus },
   { href: "/autopilot", label: "おまかせ", icon: Sparkles },
   { href: "/calendar", label: "予約", icon: CalendarDays },
+  { href: "/rank", label: "順位", icon: TrendingUp },
   { href: "/inbox", label: "受信", icon: MessageCircle },
   { href: "/settings", label: "設定", icon: Settings },
 ];

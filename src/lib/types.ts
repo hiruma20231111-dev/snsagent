@@ -167,3 +167,32 @@ export interface BankItem {
   used: boolean;
   createdAt: string;
 }
+
+// ============================================================
+// Keyword rank tracking (MEO) — where the shop ranks on Google
+// ============================================================
+
+/** The business the rank engine measures, resolved via Google Places. */
+export interface RankConfig {
+  businessName: string;
+  address?: string;
+  placeId?: string;
+  lat?: number;
+  lng?: number;
+  updatedAt: string;
+}
+
+/** One measurement: rank (1-based) or null = 圏外 (out of the local pack). */
+export interface RankPoint {
+  at: string;
+  rank: number | null;
+}
+
+export interface RankKeyword {
+  id: string;
+  keyword: string;
+  addedAt: string;
+  lastRank?: number | null;
+  lastChecked?: string;
+  history: RankPoint[];
+}

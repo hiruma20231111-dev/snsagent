@@ -16,11 +16,20 @@
 
 import crypto from "crypto";
 import { put, list, del } from "@vercel/blob";
-import type { AutopilotConfig, BankItem, Channel, PostFormat } from "./types";
+import type {
+  AutopilotConfig,
+  BankItem,
+  Channel,
+  PostFormat,
+  RankConfig,
+  RankKeyword,
+} from "./types";
 
 const POSTS_PREFIX = "schedules/";
 const BANK_PREFIX = "bank/";
 const AUTOPILOT_KEY = "autopilot/config.json";
+const RANK_CONFIG_KEY = "rank/config.json";
+const RANK_KW_PREFIX = "rank/kw/";
 const TOKEN_KEY = "auth/ig-token.json";
 
 export type StoredPostStatus =
@@ -146,6 +155,41 @@ export async function updateBankItem(id: string, patch: Partial<BankItem>): Prom
 
 export async function deleteBankItem(id: string): Promise<void> {
   const { blobs } = await list({ prefix: `${BANK_PREFIX}${id}.json` });
+  await Promise.all(blobs.map((b) => del(b.url)));
+}
+
+// ---------- keyword rank tracking (MEO) ----------
+
+export async function getRankConfig(): Promise<RankConfig | null> {
+  const { blobs } = await list({ prefix: RANK_CONFIG_KEY });
+  if (!blobs.length) return null;
+  return fetchJson<RankConfig>(blobs[0].url);
+}
+
+export async function saveRankConfig(cfg: RankConfig): Promise<void> {
+  await putJson(RANK_CONFIG_KEY, { ...cfg, updatedAt: new Date().toISOString() });
+}
+
+export async function listRankKeywords(): Promise<RankKeyword[]> {
+  const { blobs } = await list({ prefix: RANK_KW_PREFIX });
+  const items = await Promise.all(blobs.map((b) => fetchJson<RankKeyword>(b.url)));
+  return items
+    .filter((x): x is RankKeyword => !!x)
+    .sort((a, b) => +new Date(a.addedAt) - +new Date(b.addedAt));
+}
+
+export async function getRankKeyword(id: string): Promise<RankKeyword | null> {
+  const { blobs } = await list({ prefix: `${RANK_KW_PREFIX}${id}.json` });
+  if (!blobs.length) return null;
+  return fetchJson<RankKeyword>(blobs[0].url);
+}
+
+export async function saveRankKeyword(kw: RankKeyword): Promise<void> {
+  await putJson(`${RANK_KW_PREFIX}${kw.id}.json`, kw);
+}
+
+export async function deleteRankKeyword(id: string): Promise<void> {
+  const { blobs } = await list({ prefix: `${RANK_KW_PREFIX}${id}.json` });
   await Promise.all(blobs.map((b) => del(b.url)));
 }
 
