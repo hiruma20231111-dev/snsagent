@@ -243,4 +243,9 @@
 - API: `GET/POST /api/rank/config`、`GET/POST/DELETE /api/rank/keywords`、`POST /api/rank/check`。
 - **要設定**: 環境変数 **`GOOGLE_PLACES_API_KEY`**（または `GOOGLE_MAPS_API_KEY`）。Google Cloudで **Places API 有効化＋課金**。未設定時は `needsKey:true` でガイド返却＝管理のみ可能（graceful degrade）。本番スモークでGET/POST/keywords/check/cleanup確認済。
 - 注意: 正確なMEO順位は本来グリッド計測。本実装はText Search1ページ(≈20件)内の位置による近似。必要なら将来グリッドサンプリングへ拡張。
-- 残提案（リサーチ由来・未着手）: GBP口コミAI返信（72hルール・AI Adapter流用）、おまかせのストーリー対応（サーバーCanvas）。
+- 残提案（リサーチ由来・未着手）: GBP口コミAI返信（72hルール・AI Adapter流用）。
+
+### 13.1 追補（2026-06-11）— commit `2d6814f`/`b622e0e`
+- **設定→GBP連携に「Places APIキー」入力欄**を追加（`credentials.placesKey`）。rank の config/check は body の `apiKey` を優先（`places.placesKey(override)`）。env だけでなく画面入力キーでも順位計測可能。rank画面は `credentials.placesKey` で hasKey 判定。
+- **おまかせに「投稿先と形式」**（②）。`AutopilotConfig.format`（既定 **story**）。ストーリー選択時は**写真追加の段階でクライアントが文字焼き込み済み9:16画像を生成→Blob保存**（`BankItem.format`）。プランナーは `item.format` で投稿（story はcaption空）。cron はそのまま `media_type=STORIES`。
+- **タイムゾーン修正**: プランナーの投稿時刻は **JST(UTC+9)** で計算（`lib/autopilot.ts` の jstParts/jstInstant）。UTCサーバーで「夜21:30」が06:30JSTにズレる不具合を解消。本番検証で night→21:40 JST を確認。
