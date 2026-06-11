@@ -26,7 +26,6 @@ import {
   composeStoryImage,
   defaultStoryElements,
   STORY_ELEMENT_META,
-  STORY_FONT_FAMILY,
 } from "@/lib/story-image";
 import { downscaleDataUrl } from "@/lib/image";
 
@@ -700,6 +699,13 @@ export default function CreatePage() {
 
 // ===================== Story drag-and-resize editor =====================
 
+// 9-point quick placement presets (one tap instead of fiddly dragging).
+const POS_PRESETS: { x: number; y: number }[] = [
+  { x: 0.22, y: 0.16 }, { x: 0.5, y: 0.16 }, { x: 0.78, y: 0.16 },
+  { x: 0.22, y: 0.5 }, { x: 0.5, y: 0.5 }, { x: 0.78, y: 0.5 },
+  { x: 0.22, y: 0.84 }, { x: 0.5, y: 0.84 }, { x: 0.78, y: 0.84 },
+];
+
 function StoryEditor({
   photo,
   elements,
@@ -718,11 +724,43 @@ function StoryEditor({
   colors: string[];
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const [composed, setComposed] = useState<string | null>(null);
+  const [rendering, setRendering] = useState(false);
+  const [dragId, setDragId] = useState<StoryElementId | null>(null);
   const sel = elements.find((e) => e.id === selected) ?? null;
+
+  // WYSIWYG: the preview IS the burned image that will be posted — so what
+  // you arrange here is exactly what publishes (no more overlap surprises).
+  // Skip recomposing while actively dragging to keep it smooth.
+  useEffect(() => {
+    if (!photo) {
+      setComposed(null);
+      return;
+    }
+    if (dragId) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      setRendering(true);
+      composeStoryImage({ photo, elements, maxDim: 760, quality: 0.86 })
+        .then((url) => {
+          if (!cancelled) setComposed(url);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setRendering(false);
+        });
+    }, 140);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [photo, elements, dragId]);
 
   function startDrag(e: React.PointerEvent, id: StoryElementId) {
     e.preventDefault();
     onSelect(id);
+    setDragId(id);
     const stage = stageRef.current;
     if (!stage) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -735,6 +773,7 @@ function StoryEditor({
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      setDragId(null); // triggers a fresh WYSIWYG recompose
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -744,58 +783,54 @@ function StoryEditor({
     <>
       <div
         ref={stageRef}
-        className="relative mx-auto aspect-[9/16] w-full max-w-[260px] touch-none select-none overflow-hidden rounded-2xl bg-black/40 lg:max-w-[300px]"
-        style={{ containerType: "size" }}
+        className="relative mx-auto aspect-[9/16] w-full max-w-[270px] touch-none select-none overflow-hidden rounded-2xl bg-black/40 lg:max-w-[320px]"
       >
-        {photo ? (
-          // Photo FILLS the frame (cover) — no split / letterbox bars.
+        {/* the actual composed image = exactly what gets posted */}
+        {composed ? (
+          <img src={composed} alt="ストーリーズ プレビュー" className="absolute inset-0 h-full w-full object-cover" />
+        ) : photo ? (
           <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="shimmer h-full w-full" />
         )}
 
+        {/* drag handles — one per enabled layer, sitting over its burned text */}
         {elements
           .filter((el) => el.enabled && el.text.trim())
           .map((el) => (
-            <div
+            <button
               key={el.id}
               onPointerDown={(e) => startDrag(e, el.id)}
-              className={`absolute cursor-grab whitespace-pre-wrap break-words text-center leading-tight active:cursor-grabbing ${
-                selected === el.id ? "ring-2 ring-white/80" : ""
+              onClick={() => onSelect(el.id)}
+              className={`absolute flex -translate-x-1/2 -translate-y-1/2 cursor-grab items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold backdrop-blur-sm active:cursor-grabbing ${
+                selected === el.id
+                  ? "text-white ring-2 ring-white"
+                  : "bg-black/45 text-white/90 ring-1 ring-white/40"
               }`}
               style={{
                 left: `${el.x * 100}%`,
                 top: `${el.y * 100}%`,
-                transform: "translate(-50%,-50%)",
-                maxWidth: "86%",
-                fontSize: `${el.size * 100}cqh`,
-                fontFamily: STORY_FONT_FAMILY,
-                fontWeight: STORY_ELEMENT_META[el.id].weight,
-                color: el.color,
-                padding: "2px 8px",
-                borderRadius: 8,
-                background:
-                  luminance(el.color) > 0.55 ? "rgba(0,0,0,0.32)" : "rgba(255,255,255,0.4)",
-                textShadow:
-                  luminance(el.color) > 0.55
-                    ? "0 1px 6px rgba(0,0,0,0.5)"
-                    : "0 1px 4px rgba(0,0,0,0.18)",
+                background: selected === el.id ? "var(--grad-brand)" : undefined,
+                touchAction: "none",
               }}
             >
-              {el.text}
-            </div>
+              <GripDots />
+              {STORY_ELEMENT_META[el.id].label}
+            </button>
           ))}
 
-        <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
-          ドラッグで配置
+        {rendering && (
+          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/55 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
+            反映中…
+          </div>
+        )}
+        <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/90 backdrop-blur">
+          枠をドラッグ／下のボタンで配置
         </div>
       </div>
 
       {/* layer chips (select + show/hide) */}
-      <p className="mt-3 text-center text-[11px] font-semibold text-[var(--fg-faint)]">
-        文字レイヤー（タップで選択 / 長タップ風トグルで表示切替）
-      </p>
-      <div className="mt-1.5 flex flex-wrap justify-center gap-2">
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
         {elements.map((el) => (
           <button
             key={el.id}
@@ -815,50 +850,91 @@ function StoryEditor({
               }}
               className="rounded-full bg-black/25 px-1 text-[10px]"
             >
-              {el.enabled ? "ON" : "OFF"}
+              {el.enabled ? "表示" : "非表示"}
             </span>
           </button>
         ))}
       </div>
 
-      {/* selected-layer controls: size slider + color */}
+      {/* selected-layer controls: quick placement + size + color */}
       {sel && (
-        <div className="glass mt-3 space-y-3 p-3">
-          <div>
-            <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-[var(--fg-faint)]">
-              <span>「{STORY_ELEMENT_META[sel.id].label}」のサイズ</span>
-              <span className="tabular-nums">{Math.round(sel.size * 1000)}</span>
+        <div className="glass mt-3 space-y-3.5 p-3">
+          <p className="text-[11px] font-semibold text-[var(--fg-dim)]">
+            「{STORY_ELEMENT_META[sel.id].label}」を調整
+          </p>
+
+          {/* one-tap placement grid */}
+          <div className="flex items-center gap-3">
+            <span className="w-9 shrink-0 text-[11px] font-semibold text-[var(--fg-faint)]">配置</span>
+            <div className="grid grid-cols-3 gap-1">
+              {POS_PRESETS.map((p, i) => {
+                const active = Math.abs(sel.x - p.x) < 0.04 && Math.abs(sel.y - p.y) < 0.04;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => onMove(sel.id, p.x, p.y)}
+                    aria-label={`配置 ${i + 1}`}
+                    className={`h-6 w-6 rounded-md border transition-colors ${
+                      active ? "border-transparent" : "border-white/15 bg-white/5"
+                    }`}
+                    style={active ? { background: "var(--grad-brand)" } : undefined}
+                  >
+                    <span className="block h-1 w-1 mx-auto rounded-full bg-white/70" />
+                  </button>
+                );
+              })}
             </div>
+          </div>
+
+          {/* size */}
+          <div className="flex items-center gap-3">
+            <span className="w-9 shrink-0 text-[11px] font-semibold text-[var(--fg-faint)]">サイズ</span>
+            <span className="text-[10px] text-[var(--fg-faint)]">小</span>
             <input
               type="range"
               min={20}
               max={95}
               value={Math.round(sel.size * 1000)}
               onChange={(e) => onPatch(sel.id, { size: Number(e.target.value) / 1000 })}
-              className="w-full accent-[var(--brand-2)]"
+              className="flex-1 accent-[var(--brand-2)]"
             />
+            <span className="text-[10px] text-[var(--fg-faint)]">大</span>
           </div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-[11px] font-semibold text-[var(--fg-faint)]">色</span>
-            {colors.map((c) => (
-              <button
-                key={c}
-                onClick={() => onPatch(sel.id, { color: c })}
-                aria-label={`文字色 ${c}`}
-                className={`h-6 w-6 rounded-full border border-white/30 transition-transform ${
-                  sel.color === c ? "scale-110 ring-2 ring-white" : "opacity-80"
-                }`}
-                style={{ background: c }}
-              />
-            ))}
+
+          {/* color */}
+          <div className="flex items-center gap-3">
+            <span className="w-9 shrink-0 text-[11px] font-semibold text-[var(--fg-faint)]">色</span>
+            <div className="flex gap-2.5">
+              {colors.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onPatch(sel.id, { color: c })}
+                  aria-label={`文字色 ${c}`}
+                  className={`h-6 w-6 rounded-full border border-white/30 transition-transform ${
+                    sel.color === c ? "scale-110 ring-2 ring-white" : "opacity-80"
+                  }`}
+                  style={{ background: c }}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       <p className="mt-3 text-center text-[10px] leading-relaxed text-[var(--fg-faint)]">
-        Instagramの仕様上ストーリーズに文字は直接載せられないため、ここで配置した文字を画像に焼き込みます。
+        上のプレビューが、そのまま投稿される画像です（文字は画像に焼き込まれます）。
       </p>
     </>
+  );
+}
+
+function GripDots() {
+  return (
+    <span className="grid grid-cols-2 gap-[1.5px]" aria-hidden>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <span key={i} className="h-[2px] w-[2px] rounded-full bg-current" />
+      ))}
+    </span>
   );
 }
 
@@ -1000,12 +1076,4 @@ function clamp(v: number, lo: number, hi: number) {
 }
 function round3(v: number) {
   return Math.round(v * 1000) / 1000;
-}
-function luminance(hex: string): number {
-  let h = hex.replace("#", "").trim();
-  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
-  const r = parseInt(h.slice(0, 2), 16) || 0;
-  const g = parseInt(h.slice(2, 4), 16) || 0;
-  const b = parseInt(h.slice(4, 6), 16) || 0;
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
